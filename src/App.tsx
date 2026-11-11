@@ -18,7 +18,7 @@ const DESKTOP_KEY = 'desktop'
 const SWIPE_DISTANCE = 70
 
 function canUseGlobalShortcut(event: KeyboardEvent | ClipboardEvent) {
-  if (event.defaultPrevented || document.querySelector('[aria-modal="true"], .popover-panel')) return false
+  if (event.defaultPrevented || document.querySelector('[aria-modal="true"], .popover-panel:not([data-edit-controls])')) return false
   return !(event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]'))
 }
 
@@ -126,6 +126,8 @@ function Home({ board }: { board: Board }) {
 
       if (editing && (event.key === 'Enter' || event.key === 'Escape')) {
         event.preventDefault()
+        // A long press can leave the card link focused; don't keep its keyboard focus ring on exit
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
         setEditing(false)
       } else if (/^[a-z0-9]$/i.test(event.key)) {
         event.preventDefault()

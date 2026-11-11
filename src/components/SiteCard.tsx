@@ -222,7 +222,7 @@ function Actions({ className, compact, handleProps, onEdit, onDelete }: ActionsP
   const button = compact ? 'icon-btn-sm size-6 !rounded-pill' : 'icon-btn-sm'
   const size = compact ? 12 : 14
   return (
-    <div className={`flex shrink-0 items-center ${className}`}>
+    <div data-edit-controls className={`flex shrink-0 items-center ${className}`}>
       <button className={button} aria-label="编辑卡片" onClick={onEdit}>
         <Pencil size={size} />
       </button>
