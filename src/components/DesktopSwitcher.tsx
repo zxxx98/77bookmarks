@@ -91,7 +91,7 @@ export function DesktopSwitcher({ desktops, active, onSwitch, onStep }: Props) {
         <div className="popover-panel absolute top-11 left-0 z-10 w-64 animate-rise p-1.5 [animation-duration:0.15s]">
           <div className="flex items-center justify-between px-1.5 pt-0.5 pb-1.5 text-[11px] text-faint">
             <span className="font-medium">桌面</span>
-            {several && <span className="max-sm:hidden">← → 或数字键切换</span>}
+            {several && <span className="max-sm:hidden">← → 或 Tab 切换</span>}
           </div>
           {/* Keeps the dragged row inside the list */}
           <DndContext sensors={sensors} collisionDetection={closestCenter} modifiers={[({ transform }) => ({ ...transform, x: 0 })]} onDragEnd={onDragEnd}>
@@ -190,9 +190,9 @@ function DesktopRow({ desktop, index, current, removable, onSwitch, onClose }: R
             aria-current={current}
             onClick={onSwitch}
           >
-            <kbd className={`grid size-5 shrink-0 place-items-center rounded-pill border font-mono text-[11px] tabular-nums ${current ? 'border-accent/40' : 'border-line text-faint'}`}>
+            <span className={`grid size-5 shrink-0 place-items-center rounded-pill border font-mono text-[11px] tabular-nums ${current ? 'border-accent/40' : 'border-line text-faint'}`}>
               {index < 9 ? index + 1 : '·'}
-            </kbd>
+            </span>
             <span className={`truncate ${current ? 'font-medium' : ''}`}>{desktop.name}</span>
             <span className="ml-auto pr-1 font-mono text-[11px] text-faint tabular-nums group-hover/row:hidden group-focus-within/row:hidden [@media(hover:none)]:hidden">{siteCount}</span>
           </button>

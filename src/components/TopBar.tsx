@@ -93,7 +93,7 @@ export function TopBar({ desktops, desktop, onSwitchDesktop, onStepDesktop, onVi
         <ThemeMenu theme={theme} onTheme={setTheme} styleId={styleId} activePreset={activePreset} onStyle={setStyleId} className="max-md:hidden" />
         <button
           className={`icon-btn ${editing ? '!bg-accent-soft !text-accent' : ''}`}
-          title={editing ? '完成编辑' : '编辑'}
+          title={editing ? '完成编辑（Enter / Esc）' : '编辑'}
           aria-label={editing ? '完成编辑' : '编辑'}
           aria-pressed={editing}
           onClick={onToggleEditing}
