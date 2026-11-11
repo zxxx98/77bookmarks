@@ -80,3 +80,29 @@ export interface ImportResult {
   sites: number
   links: number
 }
+
+/** What a click opened: a card's homepage, or one of its links */
+export type ClickTarget = { siteId: number } | { linkId: number }
+
+export interface LinkUsage extends Link {
+  clicks: number
+  /** null until the link is first opened from the bookmark page */
+  lastClickedAt: number | null
+  createdAt: number
+}
+
+export interface SiteUsage extends Omit<Site, 'links'> {
+  desktopId: number
+  groupName: string
+  /** Openings of the homepage; link clicks are counted on the links */
+  clicks: number
+  lastClickedAt: number | null
+  createdAt: number
+  links: LinkUsage[]
+}
+
+export interface UsageStats {
+  /** When clicks started being counted, or null if unknown */
+  since: number | null
+  sites: SiteUsage[]
+}

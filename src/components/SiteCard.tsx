@@ -2,6 +2,7 @@ import { ChevronDown, GripVertical, Pencil, Trash2, X } from 'lucide-react'
 import { useState, type HTMLAttributes } from 'react'
 import type { Link, Site, View } from '../../shared/types'
 import { fullUrl, hostOf } from '../../shared/url'
+import { countClicks, recordClick } from '../clicks'
 import { usePopover } from '../ui'
 import { SiteIcon } from './SiteIcon'
 
@@ -43,6 +44,7 @@ function LargeCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
         target={openInNewTab ? '_blank' : '_self'}
         rel="noreferrer"
         draggable={false}
+        {...countClicks({ siteId: site.id })}
         className={`flex min-w-0 max-w-full items-center gap-3 rounded-card p-4 ${focusRing} ${editing ? 'pr-26' : ''} ${site.links.length ? 'pb-3' : ''}`}
       >
         <SiteIcon site={site} />
@@ -86,6 +88,7 @@ function SmallCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
           target={openInNewTab ? '_blank' : '_self'}
           rel="noreferrer"
           draggable={false}
+          {...countClicks({ siteId: site.id })}
           title={`${site.title}\n${hostOf(site.origin)}`}
           className={`flex min-w-0 flex-1 items-center gap-2.5 rounded-card p-2.5 ${focusRing}`}
         >
@@ -127,7 +130,11 @@ function SmallCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
                 rel="noreferrer"
                 title={`${link.title}\n${link.path}`}
                 className={`min-w-0 flex-1 truncate rounded-control px-2.5 py-1.5 text-[13px] ${focusRing}`}
-                onClick={() => menu.setOpen(false)}
+                {...countClicks({ linkId: link.id })}
+                onClick={() => {
+                  recordClick({ linkId: link.id })
+                  menu.setOpen(false)
+                }}
               >
                 {link.title}
               </a>
@@ -158,6 +165,7 @@ function ListRow({ site, editing, matchedLinks, handleProps, lifted, onEdit, onD
         target={openInNewTab ? '_blank' : '_self'}
         rel="noreferrer"
         draggable={false}
+        {...countClicks({ siteId: site.id })}
         title={`${site.title}\n${hostOf(site.origin)}`}
         className={`flex min-w-0 max-w-full items-center gap-2.5 rounded-control ${
           site.links.length > 0 ? 'sm:w-72 sm:max-w-full' : 'flex-1'
@@ -201,6 +209,7 @@ function LinkChip({ site, link, matched, editing, onDelete, openInNewTab }: Link
         target={openInNewTab ? '_blank' : '_self'}
         rel="noreferrer"
         draggable={false}
+        {...countClicks({ linkId: link.id })}
         title={`${link.title}\n${link.path}`}
         className={`min-w-0 max-w-44 truncate rounded-pill py-1 ${focusRing} ${editing ? 'pr-1 pl-2.5' : 'px-2.5'}`}
       >

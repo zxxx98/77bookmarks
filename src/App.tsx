@@ -7,12 +7,14 @@ import type { BoardPage, View } from '../shared/types'
 import { parseBookmarkUrl } from '../shared/url'
 import { api, ApiError } from './api'
 import { updateBoardCache } from './board-cache'
+import { recordClick } from './clicks'
 import { AddBookmarkDialog } from './components/AddBookmarkDialog'
 import { BoardView } from './components/BoardView'
 import { EditSiteDialog } from './components/EditSiteDialog'
 import { LoginPage } from './components/LoginPage'
 import { SettingsDialog } from './components/SettingsDialog'
 import { TopBar } from './components/TopBar'
+import { UsageDialog } from './components/UsageDialog'
 import { SEARCH_ENGINES, SearchEngineIcon, useSearchEngine } from './engines'
 import { useLazyIcons } from './lazy-icons'
 import { searchBoard } from './search'
@@ -187,6 +189,7 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
   // null closes the dialog; an empty string opens it without a pasted URL
   const [addingUrl, setAddingUrl] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [usageOpen, setUsageOpen] = useState(false)
   const [editingSiteId, setEditingSiteId] = useState<number | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
@@ -384,12 +387,13 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
 
   const handleSearchBookmark = useCallback(() => {
     if (!result.firstUrl) return
+    if (result.firstTarget) recordClick(result.firstTarget)
     if (openInNewTab) {
       window.open(result.firstUrl, '_blank', 'noreferrer')
     } else {
       window.location.assign(result.firstUrl)
     }
-  }, [result.firstUrl, openInNewTab])
+  }, [result.firstUrl, result.firstTarget, openInNewTab])
 
   return (
     <>
@@ -411,6 +415,7 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
         onToggleEditing={() => !loading && setEditing(!editing)}
         onAdd={() => !loading && setAddingUrl('')}
         onSettings={() => setSettingsOpen(true)}
+        onUsage={() => setUsageOpen(true)}
         onLock={onLock}
         onLogout={onLogout}
       />
@@ -507,6 +512,7 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
       </main>
       <AddBookmarkDialog open={addingUrl !== null} initialUrl={addingUrl ?? ''} onClose={() => setAddingUrl(null)} desktop={desktop} />
       <EditSiteDialog site={editingSite} desktop={desktop} desktops={desktops} onClose={() => setEditingSiteId(null)} />
+      <UsageDialog open={usageOpen} onClose={() => setUsageOpen(false)} desktops={desktops} desktop={desktop} />
       <SettingsDialog ready={settingsReady} loadError={settingsError} onRetry={onRetrySettings} open={settingsOpen} onClose={() => setSettingsOpen(false)} settings={settings} desktops={desktops} desktop={desktop} onImported={switchDesktop} />
     </>
   )

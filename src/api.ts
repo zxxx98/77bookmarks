@@ -1,4 +1,4 @@
-import type { AddResult, BoardPage, DesktopMatch, ImportMode, ImportResult, OrderInput, View } from '../shared/types'
+import type { AddResult, BoardPage, DesktopMatch, ImportMode, ImportResult, OrderInput, UsageStats, View } from '../shared/types'
 import type { SystemSettings } from '../shared/settings'
 import { rememberSettings } from './settings'
 import type { ChromeImportRow } from './chrome-import'
@@ -34,6 +34,8 @@ export const api = {
   logout: () => request('/logout', 'POST'),
   board: (desktopId: number) => request<BoardPage>(`/board${desktopId > 0 ? `?desktop=${desktopId}` : ''}`),
   search: (query: string) => request<DesktopMatch[]>(`/search?q=${encodeURIComponent(query)}`),
+  /** Click counters of every card and link, across all desktops */
+  usage: () => request<UsageStats>('/usage'),
   settings: () => request<SystemSettings>('/settings').then(rememberSettings),
   updateSettings: (settings: SystemSettings) => request<SystemSettings>('/settings', 'PUT', settings).then(rememberSettings),
   addBookmark: (url: string, desktopId: number, groupId?: number) => request<AddResult>('/bookmarks', 'POST', { url, desktopId, groupId }),

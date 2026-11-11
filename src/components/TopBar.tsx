@@ -1,4 +1,4 @@
-import { Check, ChevronDown, CornerDownLeft, Ellipsis, FoldVertical, LockKeyhole, LogOut, Monitor, Moon, Palette, Pencil, Plus, Settings, Sun, UnfoldVertical, X } from 'lucide-react'
+import { ChartNoAxesColumn, Check, ChevronDown, CornerDownLeft, Ellipsis, FoldVertical, LockKeyhole, LogOut, Monitor, Moon, Palette, Pencil, Plus, Settings, Sun, UnfoldVertical, X } from 'lucide-react'
 import type { RefObject } from 'react'
 import type { Desktop, DesktopSummary, View } from '../../shared/types'
 import { SEARCH_ENGINES, SearchEngineIcon, useSearchEngine, type SearchEngineId } from '../engines'
@@ -53,6 +53,7 @@ interface Props {
   onToggleEditing: () => void
   onAdd: () => void
   onSettings: () => void
+  onUsage: () => void
   onLock: () => void
   onLogout: () => void
 }
@@ -75,6 +76,7 @@ export function TopBar({
   onToggleEditing,
   onAdd,
   onSettings,
+  onUsage,
   onLock,
   onLogout,
 }: Props) {
@@ -181,6 +183,7 @@ export function TopBar({
           allCollapsed={allCollapsed}
           onToggleCollapseAll={onToggleCollapseAll}
           onSettings={onSettings}
+          onUsage={onUsage}
           onLock={onLock}
           onLogout={onLogout}
         />
@@ -351,11 +354,12 @@ interface MenuProps {
   allCollapsed?: boolean
   onToggleCollapseAll?: () => void
   onSettings: () => void
+  onUsage: () => void
   onLock: () => void
   onLogout: () => void
 }
 
-function MoreMenu({ view, onView, theme, onTheme, styleId, onStyle, allCollapsed, onToggleCollapseAll, onSettings, onLock, onLogout }: MenuProps) {
+function MoreMenu({ view, onView, theme, onTheme, styleId, onStyle, allCollapsed, onToggleCollapseAll, onSettings, onUsage, onLock, onLogout }: MenuProps) {
   const menu = usePopover<HTMLDivElement>()
 
   const item = 'flex w-full items-center gap-2.5 rounded-control px-2.5 py-2 text-left text-sm hover:bg-fg/6'
@@ -413,6 +417,16 @@ function MoreMenu({ view, onView, theme, onTheme, styleId, onStyle, allCollapsed
             </div>
             <div className="my-1 h-px bg-line" />
           </div>
+          <button
+            className={item}
+            onClick={() => {
+              close()
+              onUsage()
+            }}
+          >
+            <ChartNoAxesColumn size={15} className="text-muted" />
+            使用统计
+          </button>
           <button
             className={item}
             onClick={() => {
