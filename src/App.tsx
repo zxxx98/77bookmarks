@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookmarkPlus, LoaderCircle, SearchX } from 'lucide-react'
+import { ArrowUpRight, BookmarkPlus, LoaderCircle, SearchX } from 'lucide-react'
 import { motion } from 'motion/react'
 import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from 'react'
 import type { Board, View } from '../shared/types'
@@ -11,6 +11,7 @@ import { BoardView } from './components/BoardView'
 import { EditSiteDialog } from './components/EditSiteDialog'
 import { LoginPage } from './components/LoginPage'
 import { TopBar } from './components/TopBar'
+import { SEARCH_ENGINES, SearchEngineIcon, useSearchEngine } from './engines'
 import { searchBoard } from './search'
 import { useUi } from './ui'
 
@@ -49,6 +50,7 @@ export default function App() {
 function Home({ board }: { board: Board }) {
   const queryClient = useQueryClient()
   const { toast } = useUi()
+  const [engine] = useSearchEngine()
   const [query, setQuery] = useState('')
   const [editing, setEditing] = useState(false)
   // null closes the dialog; an empty string opens it without a pasted URL
@@ -175,6 +177,13 @@ function Home({ board }: { board: Board }) {
   const empty = desktop.groups.every((g) => g.sites.length === 0)
   const noResults = searching && result.groups.length === 0
 
+  const handleSearchEngine = useCallback(() => {
+    const trimmed = query.trim()
+    if (trimmed) {
+      window.open(engine.buildUrl(trimmed), '_blank', 'noreferrer')
+    }
+  }, [engine, query])
+
   return (
     <>
       <TopBar
@@ -185,7 +194,8 @@ function Home({ board }: { board: Board }) {
         onView={setView}
         query={query}
         onQuery={setQuery}
-        onSearchEnter={() => result.firstUrl && window.open(result.firstUrl, '_blank', 'noreferrer')}
+        onSearchEnter={handleSearchEngine}
+        onSearchBookmark={() => result.firstUrl && window.open(result.firstUrl, '_blank', 'noreferrer')}
         searchRef={searchRef}
         editing={editing}
         onToggleEditing={() => setEditing(!editing)}
@@ -211,11 +221,37 @@ function Home({ board }: { board: Board }) {
               </button>
             </div>
           ) : noResults ? (
-            <div className={`grid place-items-center text-center text-muted ${elsewhere.length ? 'pt-28 pb-8' : 'py-28'}`}>
+            <div className={`grid place-items-center text-center text-muted ${elsewhere.length ? 'pt-24 pb-8' : 'py-24'}`}>
               <SearchX size={28} className="mb-3 text-faint" />
               <p className="text-sm">
                 {desktops.length > 1 ? `「${desktop.name}」中` : ''}没有找到与「{query.trim()}」相关的书签
               </p>
+              <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+                <button
+                  type="button"
+                  className="btn btn-primary h-8 gap-1.5 px-3 text-xs"
+                  onClick={handleSearchEngine}
+                >
+                  <SearchEngineIcon id={engine.id} size={14} />
+                  <span>在 {engine.name} 搜索「{query.trim()}」</span>
+                  <ArrowUpRight size={13} className="opacity-75" />
+                </button>
+              </div>
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5 text-xs text-muted">
+                <span className="text-faint">其他引擎：</span>
+                {SEARCH_ENGINES.filter((e) => e.id !== engine.id).map((e) => (
+                  <a
+                    key={e.id}
+                    href={e.buildUrl(query.trim())}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1.5 rounded-pill border border-line bg-surface px-2.5 py-1 text-muted transition hover:border-accent/50 hover:text-fg"
+                  >
+                    <SearchEngineIcon id={e.id} size={12} />
+                    <span>{e.name}</span>
+                  </a>
+                ))}
+              </div>
             </div>
           ) : (
             <BoardView

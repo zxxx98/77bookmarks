@@ -1,8 +1,9 @@
-import { Check, DatabaseBackup, Ellipsis, LogOut, Monitor, Moon, Palette, Pencil, Plus, Search, Sun } from 'lucide-react'
+import { Check, ChevronDown, CornerDownLeft, DatabaseBackup, Ellipsis, LogOut, Monitor, Moon, Palette, Pencil, Plus, Sun, X } from 'lucide-react'
 import type { RefObject } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { Desktop, View } from '../../shared/types'
 import { api } from '../api'
+import { SEARCH_ENGINES, SearchEngineIcon, useSearchEngine, type SearchEngineId } from '../engines'
 import { STYLE_PRESETS, useStyle, useTheme, type StyleId, type StylePreset, type Theme } from '../theme'
 import { usePopover } from '../ui'
 import { DesktopSwitcher } from './DesktopSwitcher'
@@ -45,6 +46,7 @@ interface Props {
   query: string
   onQuery: (query: string) => void
   onSearchEnter: () => void
+  onSearchBookmark?: () => void
   searchRef: RefObject<HTMLInputElement | null>
   editing: boolean
   onToggleEditing: () => void
@@ -52,9 +54,26 @@ interface Props {
   onBackup: () => void
 }
 
-export function TopBar({ desktops, desktop, onSwitchDesktop, onStepDesktop, onView, query, onQuery, onSearchEnter, searchRef, editing, onToggleEditing, onAdd, onBackup }: Props) {
+export function TopBar({
+  desktops,
+  desktop,
+  onSwitchDesktop,
+  onStepDesktop,
+  onView,
+  query,
+  onQuery,
+  onSearchEnter,
+  onSearchBookmark,
+  searchRef,
+  editing,
+  onToggleEditing,
+  onAdd,
+  onBackup,
+}: Props) {
   const [theme, setTheme] = useTheme()
   const [styleId, setStyleId, activePreset] = useStyle()
+  const [engine] = useSearchEngine()
+  const hasQuery = query.length > 0
 
   return (
     <header className="sticky top-0 z-30 border-b-[length:var(--border-w)] border-line bg-bg/85 backdrop-blur-md">
@@ -66,23 +85,59 @@ export function TopBar({ desktops, desktop, onSwitchDesktop, onStepDesktop, onVi
         <DesktopSwitcher desktops={desktops} active={desktop} onSwitch={onSwitchDesktop} onStep={onStepDesktop} />
 
         <div className="relative mx-auto w-full max-w-md min-w-0">
-          <Search size={15} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-faint" />
+          <div className="absolute top-1/2 left-1.5 z-10 -translate-y-1/2">
+            <EngineMenu searchRef={searchRef} />
+          </div>
           <input
             ref={searchRef}
             type="search"
-            className="input h-9 pr-3 pl-9 [&::-webkit-search-cancel-button]:hidden"
-            placeholder="搜索书签"
-            aria-label="搜索书签"
+            className={`input h-9 pl-12 transition-all [&::-webkit-search-cancel-button]:hidden ${
+              hasQuery ? 'pr-18 sm:pr-22' : 'pr-3'
+            }`}
+            placeholder={`搜索 ${engine.name} 或书签`}
+            aria-label={`在 ${engine.name} 搜索或筛选书签`}
             value={query}
             onChange={(event) => onQuery(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === 'Enter') onSearchEnter()
+              if (event.key === 'Enter') {
+                event.preventDefault()
+                if (event.shiftKey && onSearchBookmark) {
+                  onSearchBookmark()
+                } else {
+                  onSearchEnter()
+                }
+              }
               if (event.key === 'Escape') {
                 onQuery('')
                 event.currentTarget.blur()
               }
             }}
           />
+          {hasQuery && (
+            <div className="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center gap-1">
+              <button
+                type="button"
+                className="icon-btn-sm size-6 text-faint hover:text-fg"
+                title="清空"
+                aria-label="清空搜索"
+                onClick={() => {
+                  onQuery('')
+                  searchRef.current?.focus()
+                }}
+              >
+                <X size={13} />
+              </button>
+              <button
+                type="button"
+                className="flex h-6 items-center gap-1 rounded-[calc(var(--r-control)-2px)] bg-fg/6 px-1.5 text-[11px] font-medium text-muted transition hover:bg-fg/10 hover:text-fg"
+                title={`在 ${engine.name} 搜索（Enter）`}
+                onClick={onSearchEnter}
+              >
+                <span className="max-xs:hidden">搜索</span>
+                <CornerDownLeft size={10} className="text-faint" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* On narrow screens the layout and theme controls move into the menu */}
@@ -104,6 +159,59 @@ export function TopBar({ desktops, desktop, onSwitchDesktop, onStepDesktop, onVi
         </button>
       </div>
     </header>
+  )
+}
+
+function EngineMenu({ searchRef }: { searchRef?: RefObject<HTMLInputElement | null> }) {
+  const [engine, setEngine] = useSearchEngine()
+  const menu = usePopover<HTMLDivElement>()
+
+  return (
+    <div ref={menu.ref} className="relative shrink-0">
+      <button
+        type="button"
+        className={`flex h-7 items-center gap-1 rounded-[calc(var(--r-control)-2px)] px-1.5 transition outline-none focus-visible:ring-2 focus-visible:ring-accent/50 ${
+          menu.open ? 'bg-fg/8 text-fg' : 'text-muted hover:bg-fg/6 hover:text-fg'
+        }`}
+        title={`当前搜索引擎：${engine.name}（点击切换）`}
+        aria-label={`当前搜索引擎：${engine.name}`}
+        aria-expanded={menu.open}
+        onClick={() => menu.setOpen(!menu.open)}
+      >
+        <SearchEngineIcon id={engine.id} size={16} />
+        <ChevronDown size={11} className={`text-faint transition-transform duration-150 ${menu.open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {menu.open && (
+        <div className="popover-panel absolute top-9 left-0 z-40 w-44 animate-rise p-1 shadow-pop [animation-duration:0.15s]">
+          <div className="px-2 pt-1 pb-1.5 text-[11px] font-medium text-faint">搜索引擎</div>
+          <div role="radiogroup" aria-label="搜索引擎" className="flex flex-col gap-0.5">
+            {SEARCH_ENGINES.map((item) => {
+              const selected = item.id === engine.id
+              return (
+                <button
+                  key={item.id}
+                  role="radio"
+                  aria-checked={selected}
+                  className={`flex w-full items-center gap-2.5 rounded-control px-2 py-1.5 text-left text-xs transition outline-none ${
+                    selected ? 'bg-accent-soft font-medium text-accent' : 'text-fg hover:bg-fg/6'
+                  }`}
+                  onClick={() => {
+                    setEngine(item.id)
+                    menu.setOpen(false)
+                    searchRef?.current?.focus()
+                  }}
+                >
+                  <SearchEngineIcon id={item.id} size={15} />
+                  <span className="flex-1">{item.name}</span>
+                  {selected && <Check size={13} className="shrink-0 text-accent" />}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
