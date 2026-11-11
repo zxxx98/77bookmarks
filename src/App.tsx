@@ -2,7 +2,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { BookmarkPlus, LoaderCircle, SearchX } from 'lucide-react'
 import { motion } from 'motion/react'
 import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from 'react'
-import { VIEWS, type Board, type View } from '../shared/types'
+import type { Board, View } from '../shared/types'
+import { parseBookmarkUrl } from '../shared/url'
 import { api, ApiError } from './api'
 import { AddBookmarkDialog } from './components/AddBookmarkDialog'
 import { BackupDialog } from './components/BackupDialog'
@@ -15,6 +16,11 @@ import { useUi } from './ui'
 
 const DESKTOP_KEY = 'desktop'
 const SWIPE_DISTANCE = 70
+
+function canUseGlobalShortcut(event: KeyboardEvent | ClipboardEvent) {
+  if (event.defaultPrevented || document.querySelector('[aria-modal="true"], .popover-panel')) return false
+  return !(event.target instanceof Element && event.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="textbox"]'))
+}
 
 export default function App() {
   const board = useQuery({ queryKey: ['board'], queryFn: api.board, retry: false })
@@ -45,7 +51,8 @@ function Home({ board }: { board: Board }) {
   const { toast } = useUi()
   const [query, setQuery] = useState('')
   const [editing, setEditing] = useState(false)
-  const [adding, setAdding] = useState(false)
+  // null closes the dialog; an empty string opens it without a pasted URL
+  const [addingUrl, setAddingUrl] = useState<string | null>(null)
   const [backupOpen, setBackupOpen] = useState(false)
   const [editingSiteId, setEditingSiteId] = useState<number | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -100,12 +107,6 @@ function Home({ board }: { board: Board }) {
     },
     [queryClient, toast, desktop.id],
   )
-  /** Reads the view from the cache, which is ahead of this render when keys are pressed in quick succession */
-  const cycleView = useCallback(() => {
-    const shown = queryClient.getQueryData<Board>(['board'])?.desktops.find((d) => d.id === desktop.id)?.view ?? desktop.view
-    setView(VIEWS[(VIEWS.indexOf(shown) + 1) % VIEWS.length])
-  }, [queryClient, desktop.id, desktop.view, setView])
-
   const result = useMemo(() => searchBoard(desktop.groups, query), [desktop.groups, query])
   const searching = query.trim() !== ''
   /** Matches on the desktops that aren't shown */
@@ -120,32 +121,42 @@ function Home({ board }: { board: Board }) {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement
       // defaultPrevented: a keyboard drag is using the arrow keys
-      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return
-      if (target.closest('input, textarea, select, [contenteditable]') || document.querySelector('[aria-modal="true"]')) return
+      if (!canUseGlobalShortcut(event) || event.isComposing || event.metaKey || event.ctrlKey || event.altKey) return
 
-      if (event.key === '/') {
+      if (editing && (event.key === 'Enter' || event.key === 'Escape')) {
+        event.preventDefault()
+        setEditing(false)
+      } else if (/^[a-z0-9]$/i.test(event.key)) {
+        event.preventDefault()
+        setQuery((current) => current + event.key)
+        searchRef.current?.focus()
+      } else if (event.key === '/') {
         event.preventDefault()
         searchRef.current?.focus()
-      } else if (event.key.toLowerCase() === 'n') {
+      } else if (event.key === 'Tab' && desktops.length > 1) {
         event.preventDefault()
-        setAdding(true)
-      } else if (event.key.toLowerCase() === 'v') {
-        cycleView()
+        stepDesktop(event.shiftKey ? -1 : 1)
       } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
         if (desktops.length > 1) event.preventDefault()
         stepDesktop(event.key === 'ArrowLeft' ? -1 : 1)
-      } else if (/^[1-9]$/.test(event.key)) {
-        const numbered = desktops[Number(event.key) - 1]
-        if (numbered) switchDesktop(numbered.id)
-      } else if (event.key === 'Escape') {
-        setEditing(false)
       }
     }
+    const onPaste = (event: ClipboardEvent) => {
+      if (!canUseGlobalShortcut(event)) return
+      // The paste event exposes the clipboard without requesting clipboard-read permission
+      const url = event.clipboardData?.getData('text/plain').trim()
+      if (!url || !parseBookmarkUrl(url)) return
+      event.preventDefault()
+      setAddingUrl(url)
+    }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [desktops, cycleView, stepDesktop, switchDesktop])
+    window.addEventListener('paste', onPaste)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('paste', onPaste)
+    }
+  }, [desktops.length, editing, stepDesktop])
 
   // A horizontal swipe switches desktops on touch screens. Off in edit mode, where touches drag cards
   const touchStart = useRef<{ x: number; y: number } | null>(null)
@@ -179,7 +190,7 @@ function Home({ board }: { board: Board }) {
         searchRef={searchRef}
         editing={editing}
         onToggleEditing={() => setEditing(!editing)}
-        onAdd={() => setAdding(true)}
+        onAdd={() => setAddingUrl('')}
         onBackup={() => setBackupOpen(true)}
       />
       <main className="mx-auto max-w-7xl overflow-x-clip px-4 pt-8 pb-24 sm:px-6" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
@@ -196,7 +207,7 @@ function Home({ board }: { board: Board }) {
               </span>
               <h2 className="font-display text-lg font-semibold">{desktops.length > 1 ? `「${desktop.name}」还没有书签` : '还没有书签'}</h2>
               <p className="mt-1 mb-5 max-w-xs text-sm text-muted">粘贴一个网址，域名会成为卡片，子路径会成为卡片上的链接。</p>
-              <button className="btn btn-primary" onClick={() => setAdding(true)}>
+              <button className="btn btn-primary" onClick={() => setAddingUrl('')}>
                 添加第一个书签
               </button>
             </div>
@@ -228,7 +239,7 @@ function Home({ board }: { board: Board }) {
           )}
         </motion.div>
       </main>
-      <AddBookmarkDialog open={adding} onClose={() => setAdding(false)} desktop={desktop} />
+      <AddBookmarkDialog open={addingUrl !== null} initialUrl={addingUrl ?? ''} onClose={() => setAddingUrl(null)} desktop={desktop} />
       <EditSiteDialog site={editingSite} desktop={desktop} desktops={desktops} onClose={() => setEditingSiteId(null)} />
       <BackupDialog open={backupOpen} onClose={() => setBackupOpen(false)} desktops={desktops} desktop={desktop} onImported={switchDesktop} />
     </>

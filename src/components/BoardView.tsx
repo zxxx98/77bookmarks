@@ -62,7 +62,11 @@ export function BoardView({ desktop, groups, editing, sortable, matchedLinks, on
   const [activeSite, setActiveSite] = useState<Site | null>(null)
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+      // Enter finishes layout editing even when a drag handle still has focus
+      keyboardCodes: { start: ['Space'], cancel: ['Escape'], end: ['Space', 'Enter', 'Tab'] },
+    }),
   )
   const view = draft ?? groups
 

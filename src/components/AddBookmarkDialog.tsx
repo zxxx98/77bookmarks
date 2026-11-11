@@ -14,7 +14,7 @@ const RESULT_MESSAGE: Record<AddResult['result'], (title: string) => string> = {
 }
 
 /** Adds to `desktop`, the one currently shown */
-export function AddBookmarkDialog({ open, onClose, desktop }: { open: boolean; onClose: () => void; desktop: Desktop }) {
+export function AddBookmarkDialog({ open, initialUrl = '', onClose, desktop }: { open: boolean; initialUrl?: string; onClose: () => void; desktop: Desktop }) {
   const groups = desktop.groups
   const act = useAct()
   const { toast } = useUi()
@@ -26,9 +26,9 @@ export function AddBookmarkDialog({ open, onClose, desktop }: { open: boolean; o
 
   useEffect(() => {
     if (!open) return
-    setUrl('')
+    setUrl(initialUrl)
     setIconUrl(null)
-  }, [open])
+  }, [open, initialUrl])
 
   const parsed = useMemo(() => parseBookmarkUrl(url), [url])
   const existing = useMemo(() => (parsed ? groups.flatMap((g) => g.sites).find((s) => s.origin === parsed.origin) : undefined), [parsed, groups])
