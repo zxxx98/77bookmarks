@@ -22,6 +22,14 @@ describe('GripPointerSensor activators', () => {
     ).toBe(false)
   })
 
+  it('accepts touch input on a drag handle', () => {
+    const fakeHandle = {
+      closest: (sel: string) => (sel === '[data-drag-handle]' ? fakeHandle : null),
+    } as unknown as Element
+
+    expect(handler({ nativeEvent: { isPrimary: true, button: 0, pointerType: 'touch', target: fakeHandle } } as any)).toBe(true)
+  })
+
   it('accepts elements matching data-drag-handle', () => {
     const fakeHandle = {
       closest: (sel: string) => (sel === '[data-drag-handle]' ? fakeHandle : null),
@@ -62,6 +70,14 @@ describe('LongPressPointerSensor activators', () => {
     ).toBe(false)
   })
 
+  it('rejects touch input on a card body', () => {
+    const fakeCard = {
+      closest: () => null,
+    } as unknown as Element
+
+    expect(handler({ nativeEvent: { isPrimary: true, button: 0, pointerType: 'touch', target: fakeCard } } as any)).toBe(false)
+  })
+
   it('rejects drag handles (handled by GripPointerSensor)', () => {
     const fakeHandle = {
       closest: (sel: string) => (sel === '[data-drag-handle]' ? fakeHandle : null),
@@ -96,14 +112,14 @@ describe('LongPressPointerSensor activators', () => {
     ).toBe(false)
   })
 
-  it('accepts regular card elements and links for long press', () => {
+  it('accepts mouse input on regular card elements and links for long press', () => {
     const fakeCard = {
       closest: () => null,
     } as unknown as Element
 
     expect(
       handler({
-        nativeEvent: { isPrimary: true, button: 0, target: fakeCard },
+        nativeEvent: { isPrimary: true, button: 0, pointerType: 'mouse', target: fakeCard },
       } as any),
     ).toBe(true)
   })

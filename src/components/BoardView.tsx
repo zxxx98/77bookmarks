@@ -49,7 +49,7 @@ export class LongPressPointerSensor extends PointerSensor {
     {
       eventName: 'onPointerDown' as const,
       handler: ({ nativeEvent: event }: ReactPointerEvent) => {
-        if (!event.isPrimary || event.button !== 0) return false
+        if (!event.isPrimary || event.button !== 0 || event.pointerType === 'touch') return false
         const element = toElement(event.target)
         if (!element) return false
         if (element.closest('[data-drag-handle]')) return false
