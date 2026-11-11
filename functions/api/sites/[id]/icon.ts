@@ -36,7 +36,10 @@ export const onRequestPost: Fn = async ({ request, env, params }) => {
   } else {
     const meta = await fetchPageMeta(site.origin)
     icon = await fetchSiteIcon(site.origin, meta.icons)
-    if (!icon) return fail(422, '没有找到该网站的图标')
+    if (!icon) {
+      await db.prepare('UPDATE sites SET icon_version = -1 WHERE id = ?').bind(id).run()
+      return fail(422, '没有找到该网站的图标')
+    }
   }
 
   await saveIcon(db, id, icon.contentType, icon.data)

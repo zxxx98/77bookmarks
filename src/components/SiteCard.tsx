@@ -37,18 +37,18 @@ function LargeCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
   const links = showAll ? site.links : site.links.slice(0, COLLAPSED_LINKS - 1)
 
   return (
-    <div className={`group/card relative h-full select-none [-webkit-touch-callout:none] ${lifted ? 'card-lifted scale-[1.02]' : 'card-surface'}`}>
+    <div className={`group/card relative h-full select-none overflow-hidden [-webkit-touch-callout:none] ${lifted ? 'card-lifted scale-[1.02]' : 'card-surface'}`}>
       <a
         href={site.origin}
         target={openInNewTab ? '_blank' : '_self'}
         rel="noreferrer"
         draggable={false}
-        className={`flex items-center gap-3 rounded-card p-4 ${focusRing} ${editing ? 'pr-26' : ''} ${site.links.length ? 'pb-3' : ''}`}
+        className={`flex min-w-0 max-w-full items-center gap-3 rounded-card p-4 ${focusRing} ${editing ? 'pr-26' : ''} ${site.links.length ? 'pb-3' : ''}`}
       >
         <SiteIcon site={site} />
-        <span className="min-w-0">
-          <span className="block truncate text-[15px] leading-5 font-semibold">{site.title}</span>
-          <span className="block truncate font-mono text-[11px] leading-5 text-muted">{hostOf(site.origin)}</span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[15px] leading-5 font-semibold" title={site.title}>{site.title}</span>
+          <span className="block truncate font-mono text-[11px] leading-5 text-muted" title={hostOf(site.origin)}>{hostOf(site.origin)}</span>
         </span>
       </a>
 
@@ -80,7 +80,7 @@ function SmallCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
 
   return (
     <div ref={menu.ref} className={`group/card relative h-full select-none [-webkit-touch-callout:none] ${lifted ? 'card-lifted scale-[1.03]' : 'card-surface'}`}>
-      <div className="flex items-center">
+      <div className="flex min-w-0 items-center">
         <a
           href={site.origin}
           target={openInNewTab ? '_blank' : '_self'}
@@ -90,7 +90,7 @@ function SmallCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
           className={`flex min-w-0 flex-1 items-center gap-2.5 rounded-card p-2.5 ${focusRing}`}
         >
           <SiteIcon site={site} size={30} />
-          <span className="truncate text-sm font-medium">{site.title}</span>
+          <span className="min-w-0 truncate text-sm font-medium">{site.title}</span>
         </a>
         {site.links.length > 0 && (
           <button
@@ -152,11 +152,20 @@ function SmallCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
 
 function ListRow({ site, editing, matchedLinks, handleProps, lifted, onEdit, onDelete, onDeleteLink, openInNewTab }: Props) {
   return (
-    <div className={`group/card relative flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2 select-none [-webkit-touch-callout:none] ${lifted ? 'card-lifted' : 'card-surface'}`}>
-      <a href={site.origin} target={openInNewTab ? '_blank' : '_self'} rel="noreferrer" draggable={false} className={`flex min-w-0 items-center gap-2.5 rounded-control max-sm:flex-1 sm:w-72 sm:shrink-0 ${focusRing}`}>
+    <div className={`group/card relative flex min-w-0 max-w-full flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2 select-none overflow-hidden [-webkit-touch-callout:none] ${lifted ? 'card-lifted' : 'card-surface'}`}>
+      <a
+        href={site.origin}
+        target={openInNewTab ? '_blank' : '_self'}
+        rel="noreferrer"
+        draggable={false}
+        title={`${site.title}\n${hostOf(site.origin)}`}
+        className={`flex min-w-0 max-w-full items-center gap-2.5 rounded-control ${
+          site.links.length > 0 ? 'sm:w-72 sm:max-w-full' : 'flex-1'
+        } ${editing ? 'pr-2' : ''} ${focusRing}`}
+      >
         <SiteIcon site={site} size={26} />
-        <span className="truncate text-sm font-semibold">{site.title}</span>
-        <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-faint">{hostOf(site.origin)}</span>
+        <span className="min-w-0 shrink truncate text-sm font-semibold">{site.title}</span>
+        <span className="min-w-0 shrink truncate font-mono text-[11px] text-faint">{hostOf(site.origin)}</span>
       </a>
       {site.links.length > 0 && (
         <div className="flex min-w-0 flex-wrap gap-1.5 max-sm:order-last max-sm:basis-full sm:flex-1">
@@ -182,7 +191,7 @@ interface LinkChipProps {
 function LinkChip({ site, link, matched, editing, onDelete, openInNewTab }: LinkChipProps) {
   return (
     <span
-      className={`inline-flex max-w-full items-center rounded-pill text-xs font-medium transition ${
+      className={`inline-flex min-w-0 max-w-full items-center rounded-pill text-xs font-medium transition ${
         matched ? 'bg-accent-soft text-accent ring-1 ring-accent/50' : 'bg-surface-2 text-muted hover:bg-accent-soft hover:text-accent'
       }`}
       style={{ border: matched ? undefined : '1px solid var(--chip-border)' }}
@@ -193,7 +202,7 @@ function LinkChip({ site, link, matched, editing, onDelete, openInNewTab }: Link
         rel="noreferrer"
         draggable={false}
         title={`${link.title}\n${link.path}`}
-        className={`max-w-44 truncate rounded-pill py-1 ${focusRing} ${editing ? 'pr-1 pl-2.5' : 'px-2.5'}`}
+        className={`min-w-0 max-w-44 truncate rounded-pill py-1 ${focusRing} ${editing ? 'pr-1 pl-2.5' : 'px-2.5'}`}
       >
         {link.title}
       </a>

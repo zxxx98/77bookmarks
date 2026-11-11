@@ -14,6 +14,7 @@ import { LoginPage } from './components/LoginPage'
 import { SettingsDialog } from './components/SettingsDialog'
 import { TopBar } from './components/TopBar'
 import { SEARCH_ENGINES, SearchEngineIcon, useSearchEngine } from './engines'
+import { useLazyIcons } from './lazy-icons'
 import { searchBoard } from './search'
 import { readSettings } from './settings'
 import { UiProvider, useUi } from './ui'
@@ -239,6 +240,55 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
   )
   const result = useMemo(() => searchBoard(desktop.groups, query), [desktop.groups, query])
   const searching = query.trim() !== ''
+
+  useLazyIcons(loading ? undefined : desktop)
+
+  const [collapsedGroupIds, setCollapsedGroupIds] = useState<Set<number>>(() => {
+    try {
+      const raw = localStorage.getItem(`collapsed-groups-${desktop.id}`)
+      return raw ? new Set(JSON.parse(raw)) : new Set()
+    } catch {
+      return new Set()
+    }
+  })
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`collapsed-groups-${desktop.id}`)
+      setCollapsedGroupIds(raw ? new Set(JSON.parse(raw)) : new Set())
+    } catch {
+      setCollapsedGroupIds(new Set())
+    }
+  }, [desktop.id])
+
+  const allCollapsed = desktop.groups.length > 0 && desktop.groups.every((g) => collapsedGroupIds.has(g.id))
+
+  const toggleCollapseAll = useCallback(() => {
+    setCollapsedGroupIds((prev) => {
+      const isAll = desktop.groups.length > 0 && desktop.groups.every((g) => prev.has(g.id))
+      const next = isAll ? new Set<number>() : new Set(desktop.groups.map((g) => g.id))
+      try {
+        localStorage.setItem(`collapsed-groups-${desktop.id}`, JSON.stringify([...next]))
+      } catch {}
+      return next
+    })
+  }, [desktop.groups, desktop.id])
+
+  const toggleGroupCollapse = useCallback((groupId: number) => {
+    setCollapsedGroupIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(groupId)) {
+        next.delete(groupId)
+      } else {
+        next.add(groupId)
+      }
+      try {
+        localStorage.setItem(`collapsed-groups-${desktop.id}`, JSON.stringify([...next]))
+      } catch {}
+      return next
+    })
+  }, [desktop.id])
+
   // Only aggregate counts cross the network while searching another desktop.
   const [searchTerm, setSearchTerm] = useState('')
   useEffect(() => {
@@ -260,7 +310,15 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       // defaultPrevented: a keyboard drag is using the arrow keys
-      if (!canUseGlobalShortcut(event) || event.isComposing || event.metaKey || event.ctrlKey || event.altKey) return
+      if (!canUseGlobalShortcut(event) || event.isComposing || event.metaKey || event.ctrlKey) return
+
+      if (event.altKey && (event.key.toLowerCase() === 'c' || event.code === 'KeyC')) {
+        event.preventDefault()
+        toggleCollapseAll()
+        return
+      }
+
+      if (event.altKey) return
 
       if (editing && (event.key === 'Enter' || event.key === 'Escape')) {
         event.preventDefault()
@@ -293,7 +351,7 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('paste', onPaste)
     }
-  }, [desktops.length, editing, stepDesktop, loading])
+  }, [desktops.length, editing, stepDesktop, loading, toggleCollapseAll])
 
   // A horizontal swipe switches desktops on touch screens. Off in edit mode, where touches drag cards
   const touchStart = useRef<{ x: number; y: number } | null>(null)
@@ -342,6 +400,8 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
         onSwitchDesktop={switchDesktop}
         onStepDesktop={stepDesktop}
         onView={setView}
+        allCollapsed={allCollapsed}
+        onToggleCollapseAll={toggleCollapseAll}
         query={query}
         onQuery={setQuery}
         onSearchEnter={handleSearchEngine}
@@ -421,6 +481,8 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
               editing={editing}
               sortable={!searching}
               matchedLinks={result.matchedLinks}
+              collapsedGroupIds={collapsedGroupIds}
+              onToggleGroupCollapse={toggleGroupCollapse}
               onEditSite={setEditingSiteId}
               onStartEditing={() => setEditing(true)}
             />

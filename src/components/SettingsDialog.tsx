@@ -20,9 +20,10 @@ interface Props {
 }
 
 export function SettingsDialog({ open, ready, loadError, onRetry, ...props }: Props) {
+  const [importBusy, setImportBusy] = useState(false)
   return (
-    <Dialog open={open} onClose={props.onClose} title="系统设置" width="max-w-lg">
-      {ready ? <Content {...props} /> : (
+    <Dialog open={open} onClose={() => { if (!importBusy) props.onClose() }} closeDisabled={importBusy} title="系统设置" width="max-w-lg">
+      {ready ? <Content {...props} importBusy={importBusy} onBusyChange={setImportBusy} /> : (
         <div className="grid place-items-center gap-3 py-8 text-sm text-muted" role="status">
           {loadError ? <>
             <p>设置加载失败</p>
@@ -34,7 +35,7 @@ export function SettingsDialog({ open, ready, loadError, onRetry, ...props }: Pr
   )
 }
 
-function Content({ settings, ...backupProps }: Omit<Props, 'open' | 'ready' | 'loadError' | 'onRetry'>) {
+function Content({ settings, importBusy, onBusyChange, ...backupProps }: Omit<Props, 'open' | 'ready' | 'loadError' | 'onRetry'> & { importBusy: boolean; onBusyChange: (busy: boolean) => void }) {
   const queryClient = useQueryClient()
   const { toast } = useUi()
   const [tab, setTab] = useState<'general' | 'layout' | 'backup'>('general')
@@ -80,6 +81,7 @@ function Content({ settings, ...backupProps }: Omit<Props, 'open' | 'ready' | 'l
             id={`settings-tab-${id}`}
             aria-selected={tab === id}
             aria-controls={`settings-panel-${id}`}
+            disabled={importBusy}
             className={`flex flex-1 items-center justify-center gap-1.5 rounded-control px-2 py-2 text-xs font-medium transition sm:text-sm ${tab === id ? 'bg-surface text-fg shadow-xs' : 'text-muted hover:text-fg'}`}
             onClick={() => setTab(id)}
           >
@@ -160,7 +162,7 @@ function Content({ settings, ...backupProps }: Omit<Props, 'open' | 'ready' | 'l
         </form>
       </div>
       <div role="tabpanel" id="settings-panel-backup" aria-labelledby="settings-tab-backup" hidden={tab !== 'backup'}>
-        <BackupSettings {...backupProps} />
+        <BackupSettings {...backupProps} onBusyChange={onBusyChange} importBusy={importBusy} />
       </div>
     </>
   )

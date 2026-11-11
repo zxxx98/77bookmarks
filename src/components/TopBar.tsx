@@ -1,4 +1,4 @@
-import { Check, ChevronDown, CornerDownLeft, Ellipsis, LockKeyhole, LogOut, Monitor, Moon, Palette, Pencil, Plus, Settings, Sun, X } from 'lucide-react'
+import { Check, ChevronDown, CornerDownLeft, Ellipsis, FoldVertical, LockKeyhole, LogOut, Monitor, Moon, Palette, Pencil, Plus, Settings, Sun, UnfoldVertical, X } from 'lucide-react'
 import type { RefObject } from 'react'
 import type { Desktop, DesktopSummary, View } from '../../shared/types'
 import { SEARCH_ENGINES, SearchEngineIcon, useSearchEngine, type SearchEngineId } from '../engines'
@@ -42,6 +42,8 @@ interface Props {
   onSwitchDesktop: (desktopId: number) => void
   onStepDesktop: (step: 1 | -1) => void
   onView: (view: View) => void
+  allCollapsed?: boolean
+  onToggleCollapseAll?: () => void
   query: string
   onQuery: (query: string) => void
   onSearchEnter: () => void
@@ -62,6 +64,8 @@ export function TopBar({
   onSwitchDesktop,
   onStepDesktop,
   onView,
+  allCollapsed,
+  onToggleCollapseAll,
   query,
   onQuery,
   onSearchEnter,
@@ -146,6 +150,17 @@ export function TopBar({
 
         {/* On narrow screens the layout and theme controls move into the menu */}
         <ViewSwitch view={desktop.view} onView={onView} className="max-md:hidden" />
+        {onToggleCollapseAll && (
+          <button
+            className={`icon-btn max-md:hidden ${allCollapsed ? '!bg-accent-soft !text-accent' : ''}`}
+            title={allCollapsed ? '展开所有分组（Alt+C）' : '折叠所有分组（Alt+C）'}
+            aria-label={allCollapsed ? '展开所有分组' : '折叠所有分组'}
+            aria-pressed={allCollapsed}
+            onClick={onToggleCollapseAll}
+          >
+            {allCollapsed ? <UnfoldVertical size={16} /> : <FoldVertical size={16} />}
+          </button>
+        )}
         <ThemeMenu theme={theme} onTheme={setTheme} styleId={styleId} activePreset={activePreset} onStyle={setStyleId} className="max-md:hidden" />
         <button
           className={`icon-btn ${editing ? '!bg-accent-soft !text-accent' : ''}`}
@@ -156,7 +171,19 @@ export function TopBar({
         >
           {editing ? <Check size={17} /> : <Pencil size={16} />}
         </button>
-        <MoreMenu view={desktop.view} onView={onView} theme={theme} onTheme={setTheme} styleId={styleId} onStyle={setStyleId} onSettings={onSettings} onLock={onLock} onLogout={onLogout} />
+        <MoreMenu
+          view={desktop.view}
+          onView={onView}
+          theme={theme}
+          onTheme={setTheme}
+          styleId={styleId}
+          onStyle={setStyleId}
+          allCollapsed={allCollapsed}
+          onToggleCollapseAll={onToggleCollapseAll}
+          onSettings={onSettings}
+          onLock={onLock}
+          onLogout={onLogout}
+        />
         <button className="btn btn-primary max-sm:w-9 max-sm:px-0" onClick={onAdd} aria-label="添加书签">
           <Plus size={16} strokeWidth={2.5} />
           <span className="max-sm:hidden">添加</span>
@@ -321,12 +348,14 @@ interface MenuProps {
   onTheme: (theme: Theme) => void
   styleId: StyleId
   onStyle: (style: StyleId) => void
+  allCollapsed?: boolean
+  onToggleCollapseAll?: () => void
   onSettings: () => void
   onLock: () => void
   onLogout: () => void
 }
 
-function MoreMenu({ view, onView, theme, onTheme, styleId, onStyle, onSettings, onLock, onLogout }: MenuProps) {
+function MoreMenu({ view, onView, theme, onTheme, styleId, onStyle, allCollapsed, onToggleCollapseAll, onSettings, onLock, onLogout }: MenuProps) {
   const menu = usePopover<HTMLDivElement>()
 
   const item = 'flex w-full items-center gap-2.5 rounded-control px-2.5 py-2 text-left text-sm hover:bg-fg/6'
@@ -340,6 +369,19 @@ function MoreMenu({ view, onView, theme, onTheme, styleId, onStyle, onSettings, 
         <div className="popover-panel absolute top-11 right-0 z-30 w-56 animate-rise p-1.5 [animation-duration:0.15s]">
           <div className="md:hidden">
             <ViewSwitch view={view} onView={onView} className="m-1" />
+            {onToggleCollapseAll && (
+              <button
+                className={item}
+                onClick={() => {
+                  close()
+                  onToggleCollapseAll()
+                }}
+              >
+                {allCollapsed ? <UnfoldVertical size={15} className="text-muted" /> : <FoldVertical size={15} className="text-muted" />}
+                <span className="flex-1">{allCollapsed ? '展开所有分组' : '折叠所有分组'}</span>
+                <kbd className="font-mono text-xs text-faint">Alt+C</kbd>
+              </button>
+            )}
             <div className="mx-1 mt-2 mb-1 flex rounded-control border border-line bg-surface-2 p-0.5">
               {THEMES.map((t) => (
                 <button

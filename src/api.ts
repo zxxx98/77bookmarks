@@ -1,6 +1,7 @@
 import type { AddResult, BoardPage, DesktopMatch, ImportMode, ImportResult, OrderInput, View } from '../shared/types'
 import type { SystemSettings } from '../shared/settings'
 import { rememberSettings } from './settings'
+import type { ChromeImportRow } from './chrome-import'
 
 export class ApiError extends Error {
   constructor(
@@ -63,4 +64,8 @@ export const api = {
     return { blob: await response.blob(), filename: encoded ? decodeURIComponent(encoded) : '77bookmarks.json' }
   },
   importBackup: (backup: unknown, mode: ImportMode) => request<ImportResult>(`/import?mode=${mode}`, 'POST', backup),
+  importChromeGroups: (desktopId: number, offset: number, items: string[]) =>
+    request<{ groupIds: number[] }>('/chrome-import', 'POST', { kind: 'groups', desktopId, offset, items }),
+  importChromeRows: (desktopId: number, items: ChromeImportRow[]) =>
+    request<{ ok: true }>('/chrome-import', 'POST', { kind: 'rows', desktopId, items }),
 }

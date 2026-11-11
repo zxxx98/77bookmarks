@@ -4,6 +4,7 @@ import { backupStats, parseBackup, type ParsedBackup } from '../../shared/backup
 import type { Desktop, DesktopSummary, ImportMode } from '../../shared/types'
 import { api } from '../api'
 import { useAct, useUi } from '../ui'
+import { ChromeImportSettings } from './ChromeImportSettings'
 
 interface Props {
   onClose: () => void
@@ -11,6 +12,8 @@ interface Props {
   desktop: Desktop
   /** Called with the first imported desktop once an import has finished */
   onImported: (desktopId: number) => void
+  onBusyChange: (busy: boolean) => void
+  importBusy: boolean
 }
 
 function download(blob: Blob, filename: string) {
@@ -28,7 +31,7 @@ const MODES: { value: ImportMode; label: string; hint: string }[] = [
   { value: 'replace', label: '替换全部数据', hint: '先清空现有的全部桌面' },
 ]
 
-export function BackupSettings({ onClose, desktops, desktop, onImported }: Props) {
+export function BackupSettings({ onClose, desktops, desktop, onImported, onBusyChange, importBusy }: Props) {
   const act = useAct()
   const { confirm, toast } = useUi()
   const fileInput = useRef<HTMLInputElement>(null)
@@ -49,6 +52,7 @@ export function BackupSettings({ onClose, desktops, desktop, onImported }: Props
   )
 
   const exportBackup = async (scope: 'all' | 'one') => {
+    if (importBusy) return
     setExporting(scope)
     try {
       const { blob, filename } = await api.exportBackup(scope === 'one' ? desktop.id : undefined)
@@ -62,7 +66,7 @@ export function BackupSettings({ onClose, desktops, desktop, onImported }: Props
   const chooseFile = async (event: ChangeEvent<HTMLInputElement>) => {
     const chosen = event.target.files?.[0]
     event.target.value = ''
-    if (!chosen) return
+    if (!chosen || importBusy) return
     let raw: unknown
     try {
       raw = JSON.parse(await chosen.text())
@@ -76,7 +80,7 @@ export function BackupSettings({ onClose, desktops, desktop, onImported }: Props
   }
 
   const runImport = async () => {
-    if (!file || importing) return
+    if (!file || importing || importBusy) return
     if (mode === 'replace') {
       const ok = await confirm({
         title: '替换全部数据？',
@@ -87,6 +91,7 @@ export function BackupSettings({ onClose, desktops, desktop, onImported }: Props
       if (!ok) return
     }
     setImporting(true)
+    onBusyChange(true)
     let firstDesktop = 0
     const ok = await act(async () => {
       const result = await api.importBackup(file.raw, mode)
@@ -95,6 +100,7 @@ export function BackupSettings({ onClose, desktops, desktop, onImported }: Props
     })
     if (!mounted.current) return
     setImporting(false)
+    onBusyChange(false)
     if (!ok) return
     onImported(firstDesktop)
     onClose()
@@ -109,12 +115,12 @@ export function BackupSettings({ onClose, desktops, desktop, onImported }: Props
         <h3 className="label">导出</h3>
         <p className="mb-2.5 text-xs leading-relaxed text-faint">备份是一个 JSON 文件，包含桌面、分组、卡片、链接和图标。</p>
         <div className="flex flex-wrap gap-2">
-          <button className="btn btn-soft" disabled={exporting !== null} onClick={() => exportBackup('all')}>
+          <button className="btn btn-soft" disabled={exporting !== null || importBusy} onClick={() => exportBackup('all')}>
             {exporting === 'all' ? <LoaderCircle size={15} className="animate-spin" /> : <Download size={15} />}
             {desktops.length > 1 ? `全部 ${desktops.length} 个桌面` : '导出备份'}
           </button>
           {desktops.length > 1 && (
-            <button className="btn btn-soft min-w-0 shrink" disabled={exporting !== null} onClick={() => exportBackup('one')}>
+            <button className="btn btn-soft min-w-0 shrink" disabled={exporting !== null || importBusy} onClick={() => exportBackup('one')}>
               {exporting === 'one' ? <LoaderCircle size={15} className="animate-spin" /> : <Download size={15} />}
               <span className="truncate">仅「{desktop.name}」</span>
             </button>
@@ -124,10 +130,11 @@ export function BackupSettings({ onClose, desktops, desktop, onImported }: Props
 
       <section className="border-t border-line pt-4">
         <h3 className="label">导入</h3>
-        <input ref={fileInput} type="file" accept="application/json,.json" hidden onChange={chooseFile} />
+        <input ref={fileInput} type="file" accept="application/json,.json" disabled={importBusy} hidden onChange={chooseFile} />
         {!file || !stats ? (
           <button
             className="flex w-full flex-col items-center gap-1.5 rounded-control border border-dashed border-line px-4 py-6 text-sm text-muted transition outline-none hover:border-accent/50 hover:text-accent focus-visible:ring-2 focus-visible:ring-accent/50"
+            disabled={importBusy}
             onClick={() => fileInput.current?.click()}
           >
             <Upload size={18} />
@@ -151,7 +158,7 @@ export function BackupSettings({ onClose, desktops, desktop, onImported }: Props
                   ))}
                 </p>
               </div>
-              <button className="icon-btn-sm -mt-1 -mr-1" aria-label="换一个文件" disabled={importing} onClick={() => setFile(null)}>
+              <button className="icon-btn-sm -mt-1 -mr-1" aria-label="换一个文件" disabled={importBusy} onClick={() => setFile(null)}>
                 <X size={15} />
               </button>
             </div>
@@ -162,7 +169,7 @@ export function BackupSettings({ onClose, desktops, desktop, onImported }: Props
                   key={option.value}
                   role="radio"
                   aria-checked={option.value === mode}
-                  disabled={importing}
+                  disabled={importBusy}
                   className={`rounded-control border-[length:var(--border-w)] px-3 py-2 text-left transition outline-none focus-visible:ring-2 focus-visible:ring-accent/50 ${
                     option.value !== mode
                       ? 'border-line hover:bg-fg/4'
@@ -179,7 +186,7 @@ export function BackupSettings({ onClose, desktops, desktop, onImported }: Props
             </div>
 
             <div className="mt-4 flex justify-end">
-              <button className={`btn ${mode === 'replace' ? 'btn-danger' : 'btn-primary'}`} disabled={importing} onClick={runImport}>
+              <button className={`btn ${mode === 'replace' ? 'btn-danger' : 'btn-primary'}`} disabled={importBusy} onClick={runImport}>
                 {importing && <LoaderCircle size={15} className="animate-spin" />}
                 {mode === 'replace' ? '替换并导入' : '导入'}
               </button>
@@ -187,6 +194,7 @@ export function BackupSettings({ onClose, desktops, desktop, onImported }: Props
           </>
         )}
       </section>
+      <ChromeImportSettings desktops={desktops} onImported={onImported} onClose={onClose} onBusyChange={onBusyChange} importBusy={importBusy} />
     </div>
   )
 }

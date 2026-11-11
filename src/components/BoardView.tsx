@@ -15,7 +15,7 @@ import {
 import { arrayMove, rectSortingStrategy, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useQueryClient } from '@tanstack/react-query'
-import { Check, GripVertical, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Check, ChevronDown, GripVertical, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import type { Desktop, Group, Site, View } from '../../shared/types'
 import type { LayoutColumns } from '../../shared/settings'
@@ -119,11 +119,13 @@ interface Props {
   /** Dragging is turned off while a search filter is hiding cards */
   sortable: boolean
   matchedLinks: Set<number>
+  collapsedGroupIds?: Set<number>
+  onToggleGroupCollapse?: (groupId: number) => void
   onEditSite: (siteId: number) => void
   onStartEditing?: () => void
 }
 
-export function BoardView({ desktop, groups, editing, sortable, matchedLinks, onEditSite, onStartEditing, openInNewTab, layoutColumns }: Props) {
+export function BoardView({ desktop, groups, editing, sortable, matchedLinks, collapsedGroupIds, onToggleGroupCollapse, onEditSite, onStartEditing, openInNewTab, layoutColumns }: Props) {
   const queryClient = useQueryClient()
   const act = useAct()
   const { toast, confirm } = useUi()
@@ -294,6 +296,8 @@ export function BoardView({ desktop, groups, editing, sortable, matchedLinks, on
               editing={editing}
               sortable={sortable}
               matchedLinks={matchedLinks}
+              collapsed={collapsedGroupIds?.has(group.id) ?? false}
+              onToggleCollapse={() => onToggleGroupCollapse?.(group.id)}
               onEditSite={onEditSite}
               onDeleteSite={removeSite}
               onContextMenu={handleContextMenu}
@@ -351,13 +355,17 @@ function GroupSection({
   editing,
   sortable,
   matchedLinks,
+  collapsed,
+  onToggleCollapse,
   onEditSite,
   onDeleteSite,
   onContextMenu,
   dragJustEndedRef,
-}: Omit<Props, 'groups' | 'desktop' | 'layoutColumns'> & {
+}: Omit<Props, 'groups' | 'desktop' | 'layoutColumns' | 'collapsedGroupIds' | 'onToggleGroupCollapse'> & {
   group: Group
   view: View
+  collapsed: boolean
+  onToggleCollapse: () => void
   onDeleteSite: (site: Site) => void
   onContextMenu: (e: React.MouseEvent, site: Site) => void
   dragJustEndedRef: React.RefObject<boolean>
@@ -365,6 +373,7 @@ function GroupSection({
   const act = useAct()
   const { confirm } = useUi()
   const [renaming, setRenaming] = useState(false)
+  const isCollapsed = collapsed && sortable
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
     id: `g-${group.id}`,
     disabled: !sortable || !editing,
@@ -410,10 +419,31 @@ function GroupSection({
             </button>
           </form>
         ) : (
-          <>
-            <h2 className="font-display text-sm font-semibold tracking-wide text-muted">{group.name}</h2>
-            <span className="rounded-pill bg-fg/6 px-1.5 font-mono text-[11px] leading-5 font-medium text-faint tabular-nums">{group.sites.length}</span>
-          </>
+          <div
+            className="flex min-w-0 items-center gap-1.5 cursor-pointer select-none group/title"
+            onClick={onToggleCollapse}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                onToggleCollapse()
+              }
+            }}
+            aria-expanded={!isCollapsed}
+            title={isCollapsed ? `展开分组「${group.name}」` : `折叠分组「${group.name}」`}
+          >
+            <ChevronDown
+              size={15}
+              className={`shrink-0 text-muted transition-transform duration-200 group-hover/title:text-fg ${isCollapsed ? '-rotate-90' : ''}`}
+            />
+            <h2 className="min-w-0 truncate font-display text-sm font-semibold tracking-wide text-muted group-hover/title:text-fg" title={group.name}>
+              {group.name}
+            </h2>
+            <span className="shrink-0 rounded-pill bg-fg/6 px-1.5 font-mono text-[11px] leading-5 font-medium text-faint tabular-nums">
+              {group.sites.length}
+            </span>
+          </div>
         )}
         {editing && !renaming && (
           <div className="ml-1 flex items-center">
@@ -439,7 +469,7 @@ function GroupSection({
       </header>
 
       <SortableContext items={group.sites.map((s) => `s-${s.id}`)} strategy={view === 'list' ? verticalListSortingStrategy : rectSortingStrategy}>
-        {group.sites.length === 0 ? (
+        {isCollapsed ? null : group.sites.length === 0 ? (
           <div className="rounded-card border border-dashed border-line px-4 py-7 text-center text-sm text-faint">
             {editing ? '把卡片拖到这里，或点击右上角「添加」' : '这个分组还没有书签'}
           </div>

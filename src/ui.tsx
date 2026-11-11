@@ -142,10 +142,11 @@ interface DialogProps {
   onClose: () => void
   title: string
   width?: string
+  closeDisabled?: boolean
   children: ReactNode
 }
 
-export function Dialog({ open, onClose, title, width = 'max-w-md', children }: DialogProps) {
+export function Dialog({ open, onClose, title, width = 'max-w-md', closeDisabled, children }: DialogProps) {
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
 
@@ -154,7 +155,7 @@ export function Dialog({ open, onClose, title, width = 'max-w-md', children }: D
     const token = Symbol()
     openDialogs.push(token)
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || openDialogs.at(-1) !== token) return
+      if (event.key !== 'Escape' || openDialogs.at(-1) !== token || closeDisabled) return
       event.stopImmediatePropagation()
       onCloseRef.current()
     }
@@ -163,7 +164,7 @@ export function Dialog({ open, onClose, title, width = 'max-w-md', children }: D
       openDialogs.splice(openDialogs.indexOf(token), 1)
       window.removeEventListener('keydown', onKey, true)
     }
-  }, [open])
+  }, [open, closeDisabled])
 
   return (
     <AnimatePresence>
@@ -174,7 +175,9 @@ export function Dialog({ open, onClose, title, width = 'max-w-md', children }: D
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
-          onMouseDown={(event) => event.target === event.currentTarget && onClose()}
+          onMouseDown={(event) => {
+            if (!closeDisabled && event.target === event.currentTarget) onClose()
+          }}
         >
           <motion.div
             role="dialog"
@@ -188,7 +191,12 @@ export function Dialog({ open, onClose, title, width = 'max-w-md', children }: D
           >
             <div className="mb-4 flex items-center justify-between gap-3">
               <h2 className="font-display text-base font-semibold">{title}</h2>
-              <button className="icon-btn-sm -mr-1" aria-label="关闭" onClick={onClose}>
+              <button
+                className={`icon-btn-sm -mr-1 ${closeDisabled ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}
+                aria-label="关闭"
+                disabled={closeDisabled}
+                onClick={onClose}
+              >
                 <X size={16} />
               </button>
             </div>

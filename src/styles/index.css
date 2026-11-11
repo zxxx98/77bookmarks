@@ -174,9 +174,40 @@
   .label {
     @apply mb-1.5 block text-xs font-medium text-muted;
   }
+  .import-progress-track {
+    position: relative;
+    height: 0.75rem;
+    overflow: hidden;
+    border: var(--border-w) solid var(--line-strong);
+    border-radius: var(--r-control);
+    background: var(--surface-2);
+  }
+  .import-progress-fill {
+    height: 100%;
+    background: var(--accent);
+    transition: width 0.2s ease;
+  }
+  .import-progress-fill.is-indeterminate {
+    position: absolute;
+    width: 35%;
+    animation: import-progress-slide 1.2s ease-in-out infinite;
+  }
+}
+
+:root[data-style='brutalist'] .import-progress-track {
+  box-shadow: 2px 2px 0 var(--line);
+}
+
+@keyframes import-progress-slide {
+  from { left: -35%; }
+  to { left: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .import-progress-fill.is-indeterminate {
+    left: 0;
+    animation: none;
+  }
   *,
   *::before,
   *::after {
