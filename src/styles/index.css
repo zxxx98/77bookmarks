@@ -4,68 +4,85 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --bg: #f3f4f7;
+  --r-card: 0.625rem;
+  --r-control: 0.5rem;
+  --r-pill: 0.375rem;
+  --border-w: 1px;
+  --card-hover-x: 0px;
+  --card-hover-y: -1px;
+  --btn-shadow: 0 1px 2px rgb(36 35 32 / 0.08);
+  --chip-border: transparent;
+  --font-display: 'Inter Variable', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', system-ui, sans-serif;
+
+  --bg: #f6f4ef;
   --surface: #ffffff;
-  --surface-2: #f1f2f6;
-  --line: rgb(15 23 42 / 0.08);
-  --fg: #0f172a;
-  --muted: #64748b;
-  --faint: #9aa4b5;
-  --accent: #5b5bd6;
-  --accent-solid: #5b5bd6;
-  --accent-soft: rgb(91 91 214 / 0.1);
-  --danger: #dc3f45;
-  --glow-1: rgb(99 102 241 / 0.13);
-  --glow-2: rgb(236 72 153 / 0.07);
-  --card-shadow: 0 1px 2px rgb(15 23 42 / 0.04), 0 2px 8px rgb(15 23 42 / 0.04);
-  --card-shadow-hover: 0 2px 4px rgb(15 23 42 / 0.04), 0 12px 28px rgb(15 23 42 / 0.1);
-  --pop-shadow: 0 8px 20px rgb(15 23 42 / 0.08), 0 24px 60px rgb(15 23 42 / 0.16);
+  --surface-2: #edeae2;
+  --line: #e2ddd3;
+  --line-strong: #c9c2b5;
+  --fg: #242320;
+  --muted: #6b675e;
+  --faint: #9b9589;
+  --accent: #3b6956;
+  --accent-solid: #262522;
+  --accent-fg: #faf8f5;
+  --accent-soft: rgb(59 105 86 / 0.12);
+  --danger: #c43c35;
+  --card-shadow: 0 1px 2px rgb(36 35 32 / 0.04);
+  --card-shadow-hover: 0 6px 18px rgb(36 35 32 / 0.07);
+  --pop-shadow: 0 10px 28px rgb(36 35 32 / 0.12), 0 2px 6px rgb(36 35 32 / 0.06);
   color-scheme: light;
 }
 
 .dark {
-  --bg: #0c0f16;
-  --surface: #151923;
-  --surface-2: #1e2330;
-  --line: rgb(255 255 255 / 0.08);
-  --fg: #e7e9ef;
-  --muted: #98a1b3;
-  --faint: #626b7d;
-  --accent: #9c9dfa;
-  --accent-solid: #6366f1;
-  --accent-soft: rgb(139 140 248 / 0.16);
-  --danger: #f2686c;
-  --glow-1: rgb(99 102 241 / 0.16);
-  --glow-2: rgb(236 72 153 / 0.06);
-  --card-shadow: 0 0 0 rgb(0 0 0 / 0);
-  --card-shadow-hover: 0 12px 32px rgb(0 0 0 / 0.45);
-  --pop-shadow: 0 24px 70px rgb(0 0 0 / 0.6);
+  --bg: #151513;
+  --surface: #1e1e1b;
+  --surface-2: #282723;
+  --line: #33312b;
+  --line-strong: #4a473f;
+  --fg: #eceae3;
+  --muted: #9e998e;
+  --faint: #6e6a60;
+  --accent: #7cb39b;
+  --accent-solid: #3b6956;
+  --accent-fg: #faf8f5;
+  --accent-soft: rgb(124 179 155 / 0.16);
+  --danger: #e06560;
+  --card-shadow: 0 1px 2px rgb(0 0 0 / 0.25);
+  --card-shadow-hover: 0 8px 24px rgb(0 0 0 / 0.4);
+  --pop-shadow: 0 20px 50px rgb(0 0 0 / 0.55);
   color-scheme: dark;
 }
 
 @theme inline {
   --font-sans: 'Inter Variable', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', system-ui, sans-serif;
+  --font-display: var(--font-display);
+  --font-mono: 'JetBrains Mono', 'SFMono-Regular', ui-monospace, 'Cascadia Code', Menlo, Monaco, Consolas, monospace;
   --color-bg: var(--bg);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
   --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
   --color-fg: var(--fg);
   --color-muted: var(--muted);
   --color-faint: var(--faint);
   --color-accent: var(--accent);
   --color-accent-solid: var(--accent-solid);
+  --color-accent-fg: var(--accent-fg);
   --color-accent-soft: var(--accent-soft);
   --color-danger: var(--danger);
+  --radius-card: var(--r-card);
+  --radius-control: var(--r-control);
+  --radius-pill: var(--r-pill);
   --shadow-card: var(--card-shadow);
   --shadow-card-hover: var(--card-shadow-hover);
   --shadow-pop: var(--pop-shadow);
-  --animate-rise: rise 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-rise: rise 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both;
   --animate-shake: shake 0.35s ease;
 
   @keyframes rise {
     from {
       opacity: 0;
-      transform: translateY(8px);
+      transform: translateY(6px);
     }
   }
   @keyframes shake {
@@ -80,12 +97,8 @@
 
 @layer base {
   body {
-    @apply bg-bg font-sans text-fg antialiased;
+    @apply bg-bg font-sans text-fg antialiased transition-colors duration-200;
     min-height: 100dvh;
-    background-image:
-      radial-gradient(60rem 28rem at 15% -8rem, var(--glow-1), transparent 70%),
-      radial-gradient(50rem 24rem at 90% -6rem, var(--glow-2), transparent 70%);
-    background-repeat: no-repeat;
   }
   button {
     cursor: pointer;
@@ -96,26 +109,67 @@
 }
 
 @layer components {
+  .card-surface {
+    border-width: var(--border-w);
+    border-color: var(--line);
+    border-radius: var(--r-card);
+    background-color: var(--surface);
+    box-shadow: var(--card-shadow);
+    transition:
+      transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1),
+      box-shadow 0.18s cubic-bezier(0.2, 0.8, 0.2, 1),
+      border-color 0.18s ease,
+      background-color 0.18s ease;
+  }
+  .card-surface:hover {
+    border-color: var(--line-strong);
+    box-shadow: var(--card-shadow-hover);
+    transform: translate(var(--card-hover-x), var(--card-hover-y));
+  }
+  .card-lifted {
+    border-width: var(--border-w);
+    border-color: var(--line-strong);
+    border-radius: var(--r-card);
+    background-color: var(--surface);
+    box-shadow: var(--card-shadow-hover);
+  }
+  .popover-panel {
+    border-width: var(--border-w);
+    border-color: var(--line);
+    border-radius: var(--r-card);
+    background-color: var(--surface);
+    box-shadow: var(--pop-shadow);
+  }
   .btn {
-    @apply inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-xl px-3.5 text-sm font-medium transition outline-none select-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:pointer-events-none disabled:opacity-50;
+    @apply inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-control px-3.5 text-sm font-medium transition outline-none select-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:pointer-events-none disabled:opacity-50;
   }
   .btn-primary {
-    @apply bg-accent-solid text-white shadow-sm hover:brightness-110 active:scale-[0.97];
+    @apply bg-accent-solid text-accent-fg hover:opacity-92 active:scale-[0.98];
+    border-width: var(--border-w);
+    border-color: var(--line);
+    box-shadow: var(--btn-shadow);
   }
   .btn-soft {
-    @apply border border-line bg-surface text-fg hover:bg-surface-2 active:scale-[0.97];
+    @apply bg-surface text-fg hover:border-line-strong hover:bg-surface-2 active:scale-[0.98];
+    border-width: var(--border-w);
+    border-color: var(--line);
+    box-shadow: var(--btn-shadow);
   }
   .btn-danger {
-    @apply bg-danger text-white hover:brightness-110 active:scale-[0.97];
+    @apply bg-danger text-white hover:brightness-110 active:scale-[0.98];
+    border-width: var(--border-w);
+    border-color: transparent;
   }
   .icon-btn {
-    @apply inline-flex size-9 shrink-0 items-center justify-center rounded-xl text-muted transition outline-none hover:bg-fg/6 hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/50 disabled:pointer-events-none disabled:opacity-50;
+    @apply inline-flex size-9 shrink-0 items-center justify-center rounded-control text-muted transition outline-none hover:bg-fg/6 hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/50 disabled:pointer-events-none disabled:opacity-50;
   }
   .icon-btn-sm {
-    @apply inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-muted transition outline-none hover:bg-fg/8 hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/50;
+    @apply inline-flex size-7 shrink-0 items-center justify-center rounded-control text-muted transition outline-none hover:bg-fg/8 hover:text-fg focus-visible:ring-2 focus-visible:ring-accent/50;
   }
   .input {
-    @apply h-10 w-full rounded-xl border border-line bg-surface-2 px-3 text-sm text-fg transition outline-none placeholder:text-faint focus:border-accent/60 focus:ring-3 focus:ring-accent/15;
+    @apply h-10 w-full rounded-control bg-surface-2 px-3 text-sm text-fg transition outline-none placeholder:text-faint focus:border-accent/70 focus:bg-surface focus:ring-2 focus:ring-accent/15;
+    border-width: var(--border-w);
+    border-color: var(--line);
   }
   .label {
     @apply mb-1.5 block text-xs font-medium text-muted;

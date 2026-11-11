@@ -45,8 +45,8 @@ export function EditSiteDialog({ site, desktop, desktops, onClose }: Props) {
 }
 
 const pill = (selected: boolean) =>
-  `max-w-full truncate rounded-full border px-3 py-1 text-sm transition ${
-    selected ? 'border-accent/50 bg-accent-soft font-medium text-accent' : 'border-line text-muted hover:text-fg'
+  `max-w-full truncate rounded-pill border-[length:var(--border-w)] px-3 py-1 text-sm transition ${
+    selected ? 'border-accent/60 bg-accent-soft font-medium text-accent' : 'border-line text-muted hover:text-fg'
   }`
 
 function Editor({ site, desktop, desktops }: { site: Site; desktop: Desktop; desktops: Desktop[] }) {
@@ -98,13 +98,13 @@ function Editor({ site, desktop, desktops }: { site: Site; desktop: Desktop; des
         <div className="relative">
           <SiteIcon site={site} size={52} />
           {iconBusy && (
-            <span className="absolute inset-0 grid place-items-center rounded-[14px] bg-surface/70">
+            <span className="absolute inset-0 grid place-items-center rounded-control bg-surface/70">
               <LoaderCircle size={18} className="animate-spin text-accent" />
             </span>
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-xs text-muted">{hostOf(site.origin)}</p>
+          <p className="truncate font-mono text-xs text-muted">{hostOf(site.origin)}</p>
           <div className="mt-1 flex flex-wrap gap-1">
             <button className="btn btn-soft h-7 px-2 text-xs" disabled={iconBusy} onClick={() => changeIcon(() => api.setIcon(site.id), '图标已更新')}>
               <RefreshCw size={12} />

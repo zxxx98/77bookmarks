@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import type { Site } from '../../shared/types'
 import { hostOf } from '../../shared/url'
+import { useIsDark, useStyle, type StyleId } from '../theme'
 
 function hueOf(text: string): number {
   let hash = 0
@@ -8,16 +9,52 @@ function hueOf(text: string): number {
   return hash % 360
 }
 
+function avatarStyle(styleId: StyleId, hue: number, dark: boolean): CSSProperties {
+  if (styleId === 'swiss') {
+    return {
+      background: 'var(--fg)',
+      color: 'var(--bg)',
+      border: '1px solid var(--fg)',
+    }
+  }
+  if (styleId === 'linear') {
+    return {
+      background: 'var(--surface-2)',
+      color: 'var(--fg)',
+      border: '1px solid var(--line)',
+    }
+  }
+  if (styleId === 'brutalist') {
+    return {
+      background: dark ? `hsl(${hue} 42% 30%)` : `hsl(${hue} 58% 86%)`,
+      color: dark ? '#f3f1ec' : '#1e242b',
+      border: 'var(--border-w) solid var(--line)',
+    }
+  }
+  // Default: 'paper' — warm botanical / mineral paper stamp
+  return {
+    background: dark ? `hsl(${hue} 18% 22%)` : `hsl(${hue} 24% 90%)`,
+    color: dark ? `hsl(${hue} 28% 80%)` : `hsl(${hue} 32% 28%)`,
+    border: dark ? `1px solid hsl(${hue} 18% 30%)` : `1px solid hsl(${hue} 22% 81%)`,
+  }
+}
+
 /** Shows the custom icon address, then the stored icon, then a letter avatar, moving on when an image fails to load */
 export function SiteIcon({ site, size = 40 }: { site: Pick<Site, 'id' | 'origin' | 'title' | 'iconVersion' | 'iconUrl'>; size?: number }) {
   const [failed, setFailed] = useState<string[]>([])
+  const [styleId] = useStyle()
+  const dark = useIsDark()
   const stored = site.iconVersion > 0 ? `/api/icon/${site.id}?v=${site.iconVersion}` : null
   const src = [site.iconUrl, stored].find((source) => source && !failed.includes(source))
-  const style = { width: size, height: size, borderRadius: size * 0.26 }
+  const borderRadius = styleId === 'swiss' ? 0 : Math.round(size * 0.22)
+  const boxStyle: CSSProperties = { width: size, height: size, borderRadius }
 
   if (src) {
     return (
-      <span className="grid shrink-0 place-items-center overflow-hidden border border-line bg-white" style={style}>
+      <span
+        className="grid shrink-0 place-items-center overflow-hidden bg-white dark:bg-white/95"
+        style={{ ...boxStyle, border: 'var(--border-w) solid var(--line)' }}
+      >
         <img
           key={src}
           src={src}
@@ -33,14 +70,15 @@ export function SiteIcon({ site, size = 40 }: { site: Pick<Site, 'id' | 'origin'
   }
 
   const hue = hueOf(hostOf(site.origin))
+  const useMono = styleId === 'linear' || styleId === 'swiss'
   return (
     <span
       aria-hidden
-      className="grid shrink-0 place-items-center font-semibold text-white uppercase"
+      className={`grid shrink-0 place-items-center font-semibold uppercase ${useMono ? 'font-mono' : ''}`}
       style={{
-        ...style,
-        fontSize: size * 0.45,
-        background: `linear-gradient(135deg, hsl(${hue} 70% 62%), hsl(${(hue + 40) % 360} 65% 48%))`,
+        ...boxStyle,
+        fontSize: Math.round(size * 0.43),
+        ...avatarStyle(styleId, hue, dark),
       }}
     >
       {[...site.title.trim()][0] ?? '?'}

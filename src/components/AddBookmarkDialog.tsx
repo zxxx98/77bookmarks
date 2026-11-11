@@ -67,7 +67,7 @@ export function AddBookmarkDialog({ open, onClose, desktop }: { open: boolean; o
           onChange={(event) => setUrl(event.target.value)}
         />
 
-        <div className="mt-3 min-h-[4.5rem] rounded-xl border border-line bg-surface-2/60 p-3 text-sm">
+        <div className="mt-3 min-h-[4.5rem] rounded-control border-[length:var(--border-w)] border-line bg-surface-2/60 p-3 text-sm">
           {!url.trim() ? (
             <p className="text-faint">网址会自动拆分：域名成为一张卡片，子路径成为卡片上的链接。</p>
           ) : !parsed ? (
@@ -75,7 +75,7 @@ export function AddBookmarkDialog({ open, onClose, desktop }: { open: boolean; o
           ) : (
             <>
               <p className="font-mono text-[13px] break-all">
-                <span className="rounded bg-accent-soft px-1 py-0.5 font-medium text-accent">{parsed.host}</span>
+                <span className="rounded-pill bg-accent-soft px-1.5 py-0.5 font-medium text-accent">{parsed.host}</span>
                 {parsed.path && <span className="text-muted">{parsed.path}</span>}
               </p>
               <p className="mt-2 flex items-center gap-1.5 text-xs text-muted">
@@ -103,8 +103,8 @@ export function AddBookmarkDialog({ open, onClose, desktop }: { open: boolean; o
                   key={group.id}
                   type="button"
                   aria-pressed={group.id === selectedGroup}
-                  className={`rounded-full border px-3 py-1 text-sm transition ${
-                    group.id === selectedGroup ? 'border-accent/50 bg-accent-soft font-medium text-accent' : 'border-line text-muted hover:text-fg'
+                  className={`rounded-pill border-[length:var(--border-w)] px-3 py-1 text-sm transition ${
+                    group.id === selectedGroup ? 'border-accent/60 bg-accent-soft font-medium text-accent' : 'border-line text-muted hover:text-fg'
                   }`}
                   onClick={() => setGroupId(group.id)}
                 >

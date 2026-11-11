@@ -201,8 +201,8 @@ function GroupSection({ group, view, editing, sortable, matchedLinks, onEditSite
           </form>
         ) : (
           <>
-            <h2 className="text-sm font-semibold tracking-wide text-muted">{group.name}</h2>
-            <span className="rounded-full bg-fg/6 px-1.5 text-[11px] leading-5 font-medium text-faint tabular-nums">{group.sites.length}</span>
+            <h2 className="font-display text-sm font-semibold tracking-wide text-muted">{group.name}</h2>
+            <span className="rounded-pill bg-fg/6 px-1.5 font-mono text-[11px] leading-5 font-medium text-faint tabular-nums">{group.sites.length}</span>
           </>
         )}
         {editing && !renaming && (
@@ -224,7 +224,7 @@ function GroupSection({ group, view, editing, sortable, matchedLinks, onEditSite
 
       <SortableContext items={group.sites.map((s) => `s-${s.id}`)} strategy={view === 'list' ? verticalListSortingStrategy : rectSortingStrategy}>
         {group.sites.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-line px-4 py-7 text-center text-sm text-faint">
+          <div className="rounded-card border border-dashed border-line px-4 py-7 text-center text-sm text-faint">
             {editing ? '把卡片拖到这里，或点击右上角「添加」' : '这个分组还没有书签'}
           </div>
         ) : (
