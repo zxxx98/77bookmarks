@@ -57,9 +57,9 @@ export function DesktopSwitcher({ desktops, active, onSwitch, onStep }: Props) {
   }
 
   return (
-    <div ref={menu.ref} className="relative shrink-0">
+    <div ref={menu.ref} className="relative w-32 shrink-0 sm:w-44">
       <div
-        className={`flex h-9 items-center rounded-control border-[length:var(--border-w)] border-line bg-surface transition ${
+        className={`flex h-9 w-full items-center rounded-control border-[length:var(--border-w)] border-line bg-surface transition ${
           menu.open ? 'border-accent/60' : 'hover:border-line-strong'
         }`}
         style={{ boxShadow: 'var(--btn-shadow)' }}
@@ -70,14 +70,15 @@ export function DesktopSwitcher({ desktops, active, onSwitch, onStep }: Props) {
           </button>
         )}
         <button
-          className={`flex h-full min-w-0 items-center gap-1 rounded-control text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-accent/50 ${
-            several ? 'px-3 sm:px-1.5' : 'px-3'
+          className={`flex h-full min-w-0 flex-1 items-center justify-center gap-1 rounded-control text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-accent/50 ${
+            several ? 'px-2 sm:px-1.5' : 'px-3'
           }`}
+          title={active.name}
           aria-label={`当前桌面：${active.name}`}
           aria-expanded={menu.open}
           onClick={() => menu.setOpen(!menu.open)}
         >
-          <span className="max-w-20 truncate sm:max-w-32">{active.name}</span>
+          <span className="truncate">{active.name}</span>
           <ChevronDown size={13} className={`shrink-0 text-faint transition ${menu.open ? 'rotate-180' : ''}`} />
         </button>
         {several && (
