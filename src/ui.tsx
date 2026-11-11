@@ -91,7 +91,7 @@ export function UiProvider({ children }: { children: ReactNode }) {
               exit={{ opacity: 0, scale: 0.95 }}
               transition={{ duration: 0.2 }}
               role="status"
-              className={`rounded-full border px-4 py-2 text-sm font-medium shadow-pop backdrop-blur ${
+              className={`rounded-control border-[length:var(--border-w)] px-4 py-2 text-sm font-medium shadow-pop backdrop-blur ${
                 t.kind === 'error' ? 'border-danger/30 bg-danger text-white' : 'border-line bg-fg text-bg'
               }`}
             >
@@ -166,7 +166,7 @@ export function Dialog({ open, onClose, title, width = 'max-w-md', children }: D
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-[12vh] backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4 pt-[12vh] backdrop-blur-xs"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -177,14 +177,14 @@ export function Dialog({ open, onClose, title, width = 'max-w-md', children }: D
             role="dialog"
             aria-modal="true"
             aria-label={title}
-            className={`w-full ${width} rounded-2xl border border-line bg-surface p-5 shadow-pop`}
-            initial={{ opacity: 0, scale: 0.94, y: 12 }}
+            className={`popover-panel w-full ${width} p-5`}
+            initial={{ opacity: 0, scale: 0.95, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: 6 }}
             transition={{ type: 'spring', stiffness: 420, damping: 32 }}
           >
             <div className="mb-4 flex items-center justify-between gap-3">
-              <h2 className="text-base font-semibold">{title}</h2>
+              <h2 className="font-display text-base font-semibold">{title}</h2>
               <button className="icon-btn-sm -mr-1" aria-label="关闭" onClick={onClose}>
                 <X size={16} />
               </button>

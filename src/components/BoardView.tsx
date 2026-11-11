@@ -279,7 +279,7 @@ export function BoardView({ desktop, groups, editing, sortable, matchedLinks, on
             left: `${Math.max(8, Math.min(contextMenu.x, window.innerWidth - 148))}px`,
             top: `${Math.max(8, Math.min(contextMenu.y, window.innerHeight - 90))}px`,
           }}
-          className="fixed z-50 min-w-32 animate-rise rounded-xl border border-line bg-surface p-1 shadow-pop [animation-duration:0.12s]"
+          className="popover-panel fixed z-50 min-w-32 animate-rise p-1 [animation-duration:0.12s]"
         >
           <button
             className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm transition hover:bg-fg/6"
@@ -375,8 +375,8 @@ function GroupSection({
           </form>
         ) : (
           <>
-            <h2 className="text-sm font-semibold tracking-wide text-muted">{group.name}</h2>
-            <span className="rounded-full bg-fg/6 px-1.5 text-[11px] leading-5 font-medium text-faint tabular-nums">{group.sites.length}</span>
+            <h2 className="font-display text-sm font-semibold tracking-wide text-muted">{group.name}</h2>
+            <span className="rounded-pill bg-fg/6 px-1.5 font-mono text-[11px] leading-5 font-medium text-faint tabular-nums">{group.sites.length}</span>
           </>
         )}
         {editing && !renaming && (
@@ -404,7 +404,7 @@ function GroupSection({
 
       <SortableContext items={group.sites.map((s) => `s-${s.id}`)} strategy={view === 'list' ? verticalListSortingStrategy : rectSortingStrategy}>
         {group.sites.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-line px-4 py-7 text-center text-sm text-faint">
+          <div className="rounded-card border border-dashed border-line px-4 py-7 text-center text-sm text-faint">
             {editing ? '把卡片拖到这里，或点击右上角「添加」' : '这个分组还没有书签'}
           </div>
         ) : (

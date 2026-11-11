@@ -36,22 +36,18 @@ function LargeCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
   const links = showAll ? site.links : site.links.slice(0, COLLAPSED_LINKS - 1)
 
   return (
-    <div
-      className={`group/card relative h-full select-none rounded-2xl border border-line bg-surface transition duration-200 [-webkit-touch-callout:none] ${
-        lifted ? 'scale-[1.03] shadow-card-hover' : 'shadow-card hover:-translate-y-0.5 hover:shadow-card-hover'
-      }`}
-    >
+    <div className={`group/card relative h-full select-none [-webkit-touch-callout:none] ${lifted ? 'card-lifted scale-[1.02]' : 'card-surface'}`}>
       <a
         href={site.origin}
         target="_blank"
         rel="noreferrer"
         draggable={false}
-        className={`flex items-center gap-3 rounded-2xl p-4 ${focusRing} ${editing ? 'pr-26' : ''} ${site.links.length ? 'pb-3' : ''}`}
+        className={`flex items-center gap-3 rounded-card p-4 ${focusRing} ${editing ? 'pr-26' : ''} ${site.links.length ? 'pb-3' : ''}`}
       >
         <SiteIcon site={site} />
         <span className="min-w-0">
           <span className="block truncate text-[15px] leading-5 font-semibold">{site.title}</span>
-          <span className="block truncate text-xs leading-5 text-muted">{hostOf(site.origin)}</span>
+          <span className="block truncate font-mono text-[11px] leading-5 text-muted">{hostOf(site.origin)}</span>
         </span>
       </a>
 
@@ -62,7 +58,7 @@ function LargeCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
           ))}
           {!showAll && (
             <button
-              className="rounded-full border border-dashed border-line px-2.5 py-1 text-xs font-medium text-faint transition hover:border-accent/50 hover:text-accent"
+              className="rounded-pill border border-dashed border-line px-2 py-0.5 font-mono text-xs font-medium text-faint transition hover:border-accent/60 hover:text-accent"
               onClick={() => setExpanded(true)}
             >
               +{site.links.length - links.length}
@@ -82,12 +78,7 @@ function SmallCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
   const matched = site.links.filter((link) => matchedLinks?.has(link.id))
 
   return (
-    <div
-      ref={menu.ref}
-      className={`group/card relative h-full select-none rounded-xl border border-line bg-surface transition duration-200 [-webkit-touch-callout:none] ${
-        lifted ? 'scale-[1.04] shadow-card-hover' : 'shadow-card hover:-translate-y-0.5 hover:shadow-card-hover'
-      }`}
-    >
+    <div ref={menu.ref} className={`group/card relative h-full select-none [-webkit-touch-callout:none] ${lifted ? 'card-lifted scale-[1.03]' : 'card-surface'}`}>
       <div className="flex items-center">
         <a
           href={site.origin}
@@ -95,16 +86,17 @@ function SmallCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
           rel="noreferrer"
           draggable={false}
           title={`${site.title}\n${hostOf(site.origin)}`}
-          className={`flex min-w-0 flex-1 items-center gap-2.5 rounded-xl p-2.5 ${focusRing}`}
+          className={`flex min-w-0 flex-1 items-center gap-2.5 rounded-card p-2.5 ${focusRing}`}
         >
           <SiteIcon site={site} size={30} />
           <span className="truncate text-sm font-medium">{site.title}</span>
         </a>
         {site.links.length > 0 && (
           <button
-            className={`mr-2 flex h-6 shrink-0 items-center gap-0.5 rounded-full pr-1 pl-2 text-[11px] font-medium tabular-nums transition ${focusRing} ${
+            className={`mr-2 flex h-6 shrink-0 items-center gap-0.5 rounded-pill pr-1 pl-2 font-mono text-[11px] font-medium tabular-nums transition ${focusRing} ${
               menu.open || matched.length ? 'bg-accent-soft text-accent' : 'bg-surface-2 text-muted hover:bg-accent-soft hover:text-accent'
             }`}
+            style={{ border: '1px solid var(--chip-border)' }}
             aria-label={`${site.links.length} 个子链接`}
             aria-expanded={menu.open}
             onClick={() => menu.setOpen(!menu.open)}
@@ -125,15 +117,15 @@ function SmallCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
 
       {menu.open && !lifted && (
         // data-open lifts the sortable wrapper above the cards that follow it
-        <div data-open className="absolute inset-x-0 top-full z-20 mt-1.5 flex max-h-72 animate-rise flex-col overflow-y-auto rounded-xl border border-line bg-surface p-1 shadow-pop [animation-duration:0.15s]">
+        <div data-open className="popover-panel absolute inset-x-0 top-full z-20 mt-1.5 flex max-h-72 animate-rise flex-col overflow-y-auto p-1 [animation-duration:0.15s]">
           {site.links.map((link) => (
-            <div key={link.id} className={`flex items-center rounded-lg hover:bg-fg/6 ${matchedLinks?.has(link.id) ? 'text-accent' : ''}`}>
+            <div key={link.id} className={`flex items-center rounded-control hover:bg-fg/6 ${matchedLinks?.has(link.id) ? 'text-accent' : ''}`}>
               <a
                 href={fullUrl(site.origin, link.path)}
                 target="_blank"
                 rel="noreferrer"
                 title={`${link.title}\n${link.path}`}
-                className={`min-w-0 flex-1 truncate rounded-lg px-2.5 py-1.5 text-[13px] ${focusRing}`}
+                className={`min-w-0 flex-1 truncate rounded-control px-2.5 py-1.5 text-[13px] ${focusRing}`}
                 onClick={() => menu.setOpen(false)}
               >
                 {link.title}
@@ -147,7 +139,7 @@ function SmallCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
       {editing && (
         <Actions
           compact
-          className="absolute -top-3 right-1.5 rounded-full border border-line bg-surface px-0.5 shadow-card"
+          className="popover-panel absolute -top-3 right-1.5 !rounded-pill px-0.5"
           handleProps={handleProps}
           onEdit={onEdit}
           onDelete={onDelete}
@@ -159,15 +151,11 @@ function SmallCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
 
 function ListRow({ site, editing, matchedLinks, handleProps, lifted, onEdit, onDelete, onDeleteLink }: Props) {
   return (
-    <div
-      className={`group/card relative flex flex-wrap items-center gap-x-3 gap-y-1.5 select-none rounded-xl border border-line bg-surface px-3 py-2 transition duration-200 [-webkit-touch-callout:none] ${
-        lifted ? 'shadow-card-hover' : 'hover:border-accent/35 hover:shadow-card'
-      }`}
-    >
-      <a href={site.origin} target="_blank" rel="noreferrer" draggable={false} className={`flex min-w-0 items-center gap-2.5 rounded-lg max-sm:flex-1 sm:w-72 sm:shrink-0 ${focusRing}`}>
+    <div className={`group/card relative flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2 select-none [-webkit-touch-callout:none] ${lifted ? 'card-lifted' : 'card-surface'}`}>
+      <a href={site.origin} target="_blank" rel="noreferrer" draggable={false} className={`flex min-w-0 items-center gap-2.5 rounded-control max-sm:flex-1 sm:w-72 sm:shrink-0 ${focusRing}`}>
         <SiteIcon site={site} size={26} />
         <span className="truncate text-sm font-semibold">{site.title}</span>
-        <span className="min-w-0 flex-1 truncate text-xs text-faint">{hostOf(site.origin)}</span>
+        <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-faint">{hostOf(site.origin)}</span>
       </a>
       {site.links.length > 0 && (
         <div className="flex min-w-0 flex-wrap gap-1.5 max-sm:order-last max-sm:basis-full sm:flex-1">
@@ -192,9 +180,10 @@ interface LinkChipProps {
 function LinkChip({ site, link, matched, editing, onDelete }: LinkChipProps) {
   return (
     <span
-      className={`inline-flex max-w-full items-center rounded-full text-xs font-medium transition ${
-        matched ? 'bg-accent-soft text-accent ring-1 ring-accent/40' : 'bg-surface-2 text-muted hover:bg-accent-soft hover:text-accent'
+      className={`inline-flex max-w-full items-center rounded-pill text-xs font-medium transition ${
+        matched ? 'bg-accent-soft text-accent ring-1 ring-accent/50' : 'bg-surface-2 text-muted hover:bg-accent-soft hover:text-accent'
       }`}
+      style={{ border: matched ? undefined : '1px solid var(--chip-border)' }}
     >
       <a
         href={fullUrl(site.origin, link.path)}
@@ -202,7 +191,7 @@ function LinkChip({ site, link, matched, editing, onDelete }: LinkChipProps) {
         rel="noreferrer"
         draggable={false}
         title={`${link.title}\n${link.path}`}
-        className={`max-w-44 truncate rounded-full py-1 ${focusRing} ${editing ? 'pr-1 pl-2.5' : 'px-2.5'}`}
+        className={`max-w-44 truncate rounded-pill py-1 ${focusRing} ${editing ? 'pr-1 pl-2.5' : 'px-2.5'}`}
       >
         {link.title}
       </a>
@@ -215,7 +204,7 @@ function DeleteLinkButton({ link, className, onDelete }: { link: Link; className
   return (
     <button
       aria-label={`删除链接 ${link.title}`}
-      className={`grid size-4 shrink-0 place-items-center rounded-full text-faint hover:bg-danger hover:text-white ${className}`}
+      className={`grid size-4 shrink-0 place-items-center rounded-pill text-faint hover:bg-danger hover:text-white ${className}`}
       onClick={() => onDelete?.(link.id)}
     >
       <X size={11} strokeWidth={2.5} />
@@ -230,7 +219,7 @@ interface ActionsProps extends Pick<Props, 'handleProps' | 'onEdit' | 'onDelete'
 
 /** Edit, delete and drag buttons shown on a card in edit mode */
 function Actions({ className, compact, handleProps, onEdit, onDelete }: ActionsProps) {
-  const button = compact ? 'icon-btn-sm size-6 rounded-full' : 'icon-btn-sm'
+  const button = compact ? 'icon-btn-sm size-6 !rounded-pill' : 'icon-btn-sm'
   const size = compact ? 12 : 14
   return (
     <div className={`flex shrink-0 items-center ${className}`}>

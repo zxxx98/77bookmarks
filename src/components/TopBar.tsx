@@ -1,21 +1,39 @@
-import { Check, DatabaseBackup, Ellipsis, LogOut, Monitor, Moon, Pencil, Plus, Search, Sun } from 'lucide-react'
+import { Check, DatabaseBackup, Ellipsis, LogOut, Monitor, Moon, Palette, Pencil, Plus, Search, Sun } from 'lucide-react'
 import type { RefObject } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { Desktop, View } from '../../shared/types'
 import { api } from '../api'
-import { useTheme, type Theme } from '../theme'
+import { STYLE_PRESETS, useStyle, useTheme, type StyleId, type StylePreset, type Theme } from '../theme'
 import { usePopover } from '../ui'
 import { DesktopSwitcher } from './DesktopSwitcher'
 import { ViewSwitch } from './ViewSwitch'
 
 const THEMES: { value: Theme; label: string; icon: typeof Sun }[] = [
-  { value: 'system', label: '跟随系统', icon: Monitor },
+  { value: 'system', label: '系统', icon: Monitor },
   { value: 'light', label: '浅色', icon: Sun },
   { value: 'dark', label: '深色', icon: Moon },
 ]
 
 export function Logo({ size = 32 }: { size?: number }) {
-  return <img src="/favicon.svg" alt="" width={size} height={size} draggable={false} className="shrink-0" />
+  const [styleId] = useStyle()
+  const rx = styleId === 'swiss' ? 0 : 7
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 32 32"
+      width={size}
+      height={size}
+      aria-hidden="true"
+      className="shrink-0 select-none"
+      style={{
+        boxShadow: styleId === 'brutalist' ? '2px 2px 0px var(--line)' : undefined,
+        borderRadius: styleId === 'swiss' ? 0 : Math.round(size * 0.22),
+      }}
+    >
+      <rect width="32" height="32" rx={rx} fill="var(--accent-solid)" stroke="var(--line)" strokeWidth={styleId === 'brutalist' ? 2 : 1} />
+      <path d="M11 8h10a1.5 1.5 0 0 1 1.5 1.5V24L16 19.5 9.5 24V9.5A1.5 1.5 0 0 1 11 8z" fill="var(--accent-fg)" />
+    </svg>
+  )
 }
 
 interface Props {
@@ -36,16 +54,14 @@ interface Props {
 
 export function TopBar({ desktops, desktop, onSwitchDesktop, onStepDesktop, onView, query, onQuery, onSearchEnter, searchRef, editing, onToggleEditing, onAdd, onBackup }: Props) {
   const [theme, setTheme] = useTheme()
-  const current = THEMES.find((t) => t.value === theme)!
-  const next = THEMES[(THEMES.indexOf(current) + 1) % THEMES.length]
-  const cycleTheme = () => setTheme(next.value)
+  const [styleId, setStyleId, activePreset] = useStyle()
 
   return (
-    <header className="sticky top-0 z-30 border-b border-line bg-bg/75 backdrop-blur-xl">
+    <header className="sticky top-0 z-30 border-b-[length:var(--border-w)] border-line bg-bg/85 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-2 px-4 sm:gap-3 sm:px-6">
         <div className="flex items-center gap-2.5 max-sm:hidden">
           <Logo />
-          <span className="hidden text-[15px] font-semibold tracking-tight xl:block">77 Bookmarks</span>
+          <span className="hidden font-display text-[15px] font-semibold tracking-tight xl:block">77 Bookmarks</span>
         </div>
         <DesktopSwitcher desktops={desktops} active={desktop} onSwitch={onSwitchDesktop} onStep={onStepDesktop} />
 
@@ -54,7 +70,7 @@ export function TopBar({ desktops, desktop, onSwitchDesktop, onStepDesktop, onVi
           <input
             ref={searchRef}
             type="search"
-            className="input h-9 rounded-full bg-fg/5 pr-3 pl-9 sm:pr-9 [&::-webkit-search-cancel-button]:hidden"
+            className="input h-9 pr-3 pl-9 sm:pr-9 [&::-webkit-search-cancel-button]:hidden"
             placeholder="搜索书签"
             aria-label="搜索书签"
             value={query}
@@ -67,16 +83,14 @@ export function TopBar({ desktops, desktop, onSwitchDesktop, onStepDesktop, onVi
               }
             }}
           />
-          <kbd className="pointer-events-none absolute top-1/2 right-3 hidden -translate-y-1/2 rounded border border-line px-1.5 text-[11px] leading-4 text-faint sm:block">
+          <kbd className="pointer-events-none absolute top-1/2 right-2.5 hidden -translate-y-1/2 rounded-pill border border-line bg-surface px-1.5 font-mono text-[11px] leading-4 text-faint sm:block">
             /
           </kbd>
         </div>
 
         {/* On narrow screens the layout and theme controls move into the menu */}
         <ViewSwitch view={desktop.view} onView={onView} className="max-md:hidden" />
-        <button className="icon-btn max-md:hidden" title={`主题：${current.label}（点击切换为${next.label}）`} aria-label={`主题：${current.label}`} onClick={cycleTheme}>
-          <current.icon size={17} />
-        </button>
+        <ThemeMenu theme={theme} onTheme={setTheme} styleId={styleId} activePreset={activePreset} onStyle={setStyleId} className="max-md:hidden" />
         <button
           className={`icon-btn ${editing ? '!bg-accent-soft !text-accent' : ''}`}
           title={editing ? '完成编辑' : '编辑'}
@@ -86,7 +100,7 @@ export function TopBar({ desktops, desktop, onSwitchDesktop, onStepDesktop, onVi
         >
           {editing ? <Check size={17} /> : <Pencil size={16} />}
         </button>
-        <MoreMenu view={desktop.view} onView={onView} theme={current} onCycleTheme={cycleTheme} onBackup={onBackup} />
+        <MoreMenu view={desktop.view} onView={onView} theme={theme} onTheme={setTheme} styleId={styleId} onStyle={setStyleId} onBackup={onBackup} />
         <button className="btn btn-primary max-sm:w-9 max-sm:px-0" onClick={onAdd} aria-label="添加书签">
           <Plus size={16} strokeWidth={2.5} />
           <span className="max-sm:hidden">添加</span>
@@ -96,15 +110,112 @@ export function TopBar({ desktops, desktop, onSwitchDesktop, onStepDesktop, onVi
   )
 }
 
+interface ThemeMenuProps {
+  theme: Theme
+  onTheme: (theme: Theme) => void
+  styleId: StyleId
+  activePreset: StylePreset
+  onStyle: (style: StyleId) => void
+  className?: string
+}
+
+function ThemeMenu({ theme, onTheme, styleId, activePreset, onStyle, className = '' }: ThemeMenuProps) {
+  const menu = usePopover<HTMLDivElement>()
+  const currentTheme = THEMES.find((t) => t.value === theme) ?? THEMES[0]
+
+  return (
+    <div ref={menu.ref} className={`relative ${className}`}>
+      <button
+        className={`icon-btn ${menu.open ? 'bg-fg/6 text-fg' : ''}`}
+        title={`风格：${activePreset.name} · 主题：${currentTheme.label}`}
+        aria-label={`外观与风格：${activePreset.name}`}
+        aria-expanded={menu.open}
+        onClick={() => menu.setOpen(!menu.open)}
+      >
+        <Palette size={17} />
+      </button>
+
+      {menu.open && (
+        <div className="popover-panel absolute top-11 right-0 z-30 w-72 animate-rise p-2.5 [animation-duration:0.15s]">
+          <div className="mb-2 flex items-center justify-between px-1">
+            <span className="text-[11px] font-medium text-faint">外观模式</span>
+            <div role="radiogroup" aria-label="外观模式" className="flex rounded-control border border-line bg-surface-2 p-0.5">
+              {THEMES.map((item) => {
+                const active = item.value === theme
+                return (
+                  <button
+                    key={item.value}
+                    role="radio"
+                    aria-checked={active}
+                    className={`flex items-center gap-1 rounded-[calc(var(--r-control)-2px)] px-2 py-1 text-xs font-medium transition outline-none ${
+                      active ? 'bg-surface text-fg shadow-xs' : 'text-muted hover:text-fg'
+                    }`}
+                    onClick={() => onTheme(item.value)}
+                  >
+                    <item.icon size={12} />
+                    {item.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="my-2 h-px bg-line" />
+
+          <div className="mb-1.5 px-1 text-[11px] font-medium text-faint">视觉风格</div>
+          <div role="radiogroup" aria-label="视觉风格" className="flex flex-col gap-1">
+            {STYLE_PRESETS.map((preset) => {
+              const selected = preset.id === styleId
+              return (
+                <button
+                  key={preset.id}
+                  role="radio"
+                  aria-checked={selected}
+                  className={`flex items-start gap-2.5 rounded-control border px-2.5 py-2 text-left transition outline-none focus-visible:ring-2 focus-visible:ring-accent/50 ${
+                    selected ? 'border-accent/60 bg-accent-soft/60' : 'border-transparent hover:bg-fg/5'
+                  }`}
+                  onClick={() => onStyle(preset.id)}
+                >
+                  <StyleSwatches swatches={preset.swatches} />
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5">
+                      <span className={`text-sm font-medium ${selected ? 'text-accent' : 'text-fg'}`}>{preset.name}</span>
+                      <span className="rounded-pill border border-line bg-surface-2 px-1.5 py-0.2 font-mono text-[10px] text-muted">{preset.tag}</span>
+                    </span>
+                    <span className="mt-0.5 block text-xs leading-snug text-muted">{preset.description}</span>
+                  </span>
+                  {selected && <Check size={15} className="mt-0.5 shrink-0 text-accent" />}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function StyleSwatches({ swatches }: { swatches: [string, string, string, string] }) {
+  return (
+    <span className="mt-1 grid size-6 shrink-0 grid-cols-2 overflow-hidden rounded-[4px] border border-line shadow-2xs" aria-hidden="true">
+      {swatches.map((color, i) => (
+        <span key={i} style={{ backgroundColor: color }} />
+      ))}
+    </span>
+  )
+}
+
 interface MenuProps {
   view: View
   onView: (view: View) => void
-  theme: (typeof THEMES)[number]
-  onCycleTheme: () => void
+  theme: Theme
+  onTheme: (theme: Theme) => void
+  styleId: StyleId
+  onStyle: (style: StyleId) => void
   onBackup: () => void
 }
 
-function MoreMenu({ view, onView, theme, onCycleTheme, onBackup }: MenuProps) {
+function MoreMenu({ view, onView, theme, onTheme, styleId, onStyle, onBackup }: MenuProps) {
   const queryClient = useQueryClient()
   const menu = usePopover<HTMLDivElement>()
 
@@ -114,7 +225,7 @@ function MoreMenu({ view, onView, theme, onCycleTheme, onBackup }: MenuProps) {
     await queryClient.refetchQueries({ queryKey: ['board'] })
   }
 
-  const item = 'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-fg/6'
+  const item = 'flex w-full items-center gap-2.5 rounded-control px-2.5 py-2 text-left text-sm hover:bg-fg/6'
   const close = () => menu.setOpen(false)
   return (
     <div ref={menu.ref} className="relative">
@@ -122,13 +233,38 @@ function MoreMenu({ view, onView, theme, onCycleTheme, onBackup }: MenuProps) {
         <Ellipsis size={18} />
       </button>
       {menu.open && (
-        <div className="absolute top-11 right-0 w-48 animate-rise rounded-xl border border-line bg-surface p-1 shadow-pop [animation-duration:0.15s]">
+        <div className="popover-panel absolute top-11 right-0 z-30 w-56 animate-rise p-1.5 [animation-duration:0.15s]">
           <div className="md:hidden">
             <ViewSwitch view={view} onView={onView} className="m-1" />
-            <button className={item} onClick={onCycleTheme}>
-              <theme.icon size={15} className="text-muted" />
-              主题：{theme.label}
-            </button>
+            <div className="mx-1 mt-2 mb-1 flex rounded-control border border-line bg-surface-2 p-0.5">
+              {THEMES.map((t) => (
+                <button
+                  key={t.value}
+                  className={`flex flex-1 items-center justify-center gap-1 rounded-[calc(var(--r-control)-2px)] py-1 text-xs font-medium ${
+                    t.value === theme ? 'bg-surface text-fg shadow-xs' : 'text-muted'
+                  }`}
+                  onClick={() => onTheme(t.value)}
+                >
+                  <t.icon size={12} />
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <div className="px-2 pt-1.5 pb-1 text-[11px] font-medium text-faint">风格</div>
+            <div className="grid grid-cols-2 gap-1 px-1 pb-1">
+              {STYLE_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  className={`flex items-center gap-1.5 rounded-control border px-2 py-1.5 text-left text-xs font-medium ${
+                    preset.id === styleId ? 'border-accent/60 bg-accent-soft text-accent' : 'border-line text-muted hover:text-fg'
+                  }`}
+                  onClick={() => onStyle(preset.id)}
+                >
+                  <span className="size-2.5 shrink-0 rounded-full border border-line" style={{ backgroundColor: preset.swatches[2] }} />
+                  <span className="truncate">{preset.name}</span>
+                </button>
+              ))}
+            </div>
             <div className="my-1 h-px bg-line" />
           </div>
           <button

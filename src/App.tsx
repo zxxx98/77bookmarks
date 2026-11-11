@@ -191,10 +191,10 @@ function Home({ board }: { board: Board }) {
         >
           {empty && !editing && !searching ? (
             <div className="grid animate-rise place-items-center py-28 text-center">
-              <span className="mb-4 grid size-14 place-items-center rounded-2xl bg-accent-soft text-accent">
+              <span className="mb-4 grid size-14 place-items-center rounded-card border-[length:var(--border-w)] border-line bg-accent-soft text-accent">
                 <BookmarkPlus size={26} />
               </span>
-              <h2 className="text-lg font-semibold">{desktops.length > 1 ? `「${desktop.name}」还没有书签` : '还没有书签'}</h2>
+              <h2 className="font-display text-lg font-semibold">{desktops.length > 1 ? `「${desktop.name}」还没有书签` : '还没有书签'}</h2>
               <p className="mt-1 mb-5 max-w-xs text-sm text-muted">粘贴一个网址，域名会成为卡片，子路径会成为卡片上的链接。</p>
               <button className="btn btn-primary" onClick={() => setAdding(true)}>
                 添加第一个书签
@@ -225,11 +225,11 @@ function Home({ board }: { board: Board }) {
               {elsewhere.map((entry) => (
                 <button
                   key={entry.desktop.id}
-                  className="flex max-w-full items-center gap-1.5 rounded-full border border-line bg-surface px-3 py-1 transition hover:border-accent/50 hover:text-accent"
+                  className="flex max-w-full items-center gap-1.5 rounded-pill border-[length:var(--border-w)] border-line bg-surface px-3 py-1 transition hover:border-accent/50 hover:text-accent"
                   onClick={() => switchDesktop(entry.desktop.id)}
                 >
                   <span className="truncate font-medium">{entry.desktop.name}</span>
-                  <span className="shrink-0 text-xs text-faint tabular-nums">{entry.count} 个结果</span>
+                  <span className="shrink-0 font-mono text-xs text-faint tabular-nums">{entry.count} 个结果</span>
                 </button>
               ))}
             </div>

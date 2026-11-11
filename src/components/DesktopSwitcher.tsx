@@ -58,14 +58,19 @@ export function DesktopSwitcher({ desktops, active, onSwitch, onStep }: Props) {
 
   return (
     <div ref={menu.ref} className="relative shrink-0">
-      <div className={`flex h-9 items-center rounded-full border border-line bg-surface/70 transition ${menu.open ? 'border-accent/50' : ''}`}>
+      <div
+        className={`flex h-9 items-center rounded-control border-[length:var(--border-w)] border-line bg-surface transition ${
+          menu.open ? 'border-accent/60' : 'hover:border-line-strong'
+        }`}
+        style={{ boxShadow: 'var(--btn-shadow)' }}
+      >
         {several && (
-          <button className={`${arrow} rounded-l-full pl-1`} aria-label="上一个桌面" title="上一个桌面（←）" onClick={() => onStep(-1)}>
+          <button className={`${arrow} rounded-l-control pl-1`} aria-label="上一个桌面" title="上一个桌面（←）" onClick={() => onStep(-1)}>
             <ChevronLeft size={15} />
           </button>
         )}
         <button
-          className={`flex h-full min-w-0 items-center gap-1 rounded-full text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-accent/50 ${
+          className={`flex h-full min-w-0 items-center gap-1 rounded-control text-sm font-medium outline-none focus-visible:ring-2 focus-visible:ring-accent/50 ${
             several ? 'px-3 sm:px-1.5' : 'px-3'
           }`}
           aria-label={`当前桌面：${active.name}`}
@@ -76,14 +81,14 @@ export function DesktopSwitcher({ desktops, active, onSwitch, onStep }: Props) {
           <ChevronDown size={13} className={`shrink-0 text-faint transition ${menu.open ? 'rotate-180' : ''}`} />
         </button>
         {several && (
-          <button className={`${arrow} rounded-r-full pr-1`} aria-label="下一个桌面" title="下一个桌面（→）" onClick={() => onStep(1)}>
+          <button className={`${arrow} rounded-r-control pr-1`} aria-label="下一个桌面" title="下一个桌面（→）" onClick={() => onStep(1)}>
             <ChevronRight size={15} />
           </button>
         )}
       </div>
 
       {menu.open && (
-        <div className="absolute top-11 left-0 z-10 w-64 animate-rise rounded-xl border border-line bg-surface p-1.5 shadow-pop [animation-duration:0.15s]">
+        <div className="popover-panel absolute top-11 left-0 z-10 w-64 animate-rise p-1.5 [animation-duration:0.15s]">
           <div className="flex items-center justify-between px-1.5 pt-0.5 pb-1.5 text-[11px] text-faint">
             <span className="font-medium">桌面</span>
             {several && <span className="max-sm:hidden">← → 或数字键切换</span>}
@@ -161,7 +166,7 @@ function DesktopRow({ desktop, index, current, removable, onSwitch, onClose }: R
     <li
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={`group/row flex h-9 items-center gap-0.5 rounded-lg pr-1 ${isDragging ? 'relative z-10 bg-surface-2 shadow-card' : ''} ${
+      className={`group/row flex h-9 items-center gap-0.5 rounded-control pr-1 ${isDragging ? 'relative z-10 bg-surface-2 shadow-card' : ''} ${
         current ? 'bg-accent-soft text-accent' : 'hover:bg-fg/6'
       }`}
     >
@@ -180,12 +185,16 @@ function DesktopRow({ desktop, index, current, removable, onSwitch, onClose }: R
         </form>
       ) : (
         <>
-          <button className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-lg pl-1.5 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-accent/50" aria-current={current} onClick={onSwitch}>
-            <kbd className={`grid size-5 shrink-0 place-items-center rounded-md border text-[11px] tabular-nums ${current ? 'border-accent/40' : 'border-line text-faint'}`}>
+          <button
+            className="flex h-full min-w-0 flex-1 items-center gap-2 rounded-control pl-1.5 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+            aria-current={current}
+            onClick={onSwitch}
+          >
+            <kbd className={`grid size-5 shrink-0 place-items-center rounded-pill border font-mono text-[11px] tabular-nums ${current ? 'border-accent/40' : 'border-line text-faint'}`}>
               {index < 9 ? index + 1 : '·'}
             </kbd>
             <span className={`truncate ${current ? 'font-medium' : ''}`}>{desktop.name}</span>
-            <span className="ml-auto pr-1 text-[11px] text-faint tabular-nums group-hover/row:hidden group-focus-within/row:hidden [@media(hover:none)]:hidden">{siteCount}</span>
+            <span className="ml-auto pr-1 font-mono text-[11px] text-faint tabular-nums group-hover/row:hidden group-focus-within/row:hidden [@media(hover:none)]:hidden">{siteCount}</span>
           </button>
           <button className={action} aria-label={`重命名桌面 ${desktop.name}`} onClick={() => setRenaming(true)}>
             <Pencil size={12} />

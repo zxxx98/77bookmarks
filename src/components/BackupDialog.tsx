@@ -133,7 +133,7 @@ function Content({ onClose, desktops, desktop, onImported }: Omit<Props, 'open'>
         <input ref={fileInput} type="file" accept="application/json,.json" hidden onChange={chooseFile} />
         {!file || !stats ? (
           <button
-            className="flex w-full flex-col items-center gap-1.5 rounded-xl border border-dashed border-line px-4 py-6 text-sm text-muted transition outline-none hover:border-accent/50 hover:text-accent focus-visible:ring-2 focus-visible:ring-accent/50"
+            className="flex w-full flex-col items-center gap-1.5 rounded-control border border-dashed border-line px-4 py-6 text-sm text-muted transition outline-none hover:border-accent/50 hover:text-accent focus-visible:ring-2 focus-visible:ring-accent/50"
             onClick={() => fileInput.current?.click()}
           >
             <Upload size={18} />
@@ -141,17 +141,17 @@ function Content({ onClose, desktops, desktop, onImported }: Omit<Props, 'open'>
           </button>
         ) : (
           <>
-            <div className="flex items-start gap-3 rounded-xl border border-line bg-surface-2/60 p-3">
+            <div className="flex items-start gap-3 rounded-control border-[length:var(--border-w)] border-line bg-surface-2/60 p-3">
               <FileJson size={18} className="mt-0.5 shrink-0 text-accent" />
               <div className="min-w-0 flex-1 text-sm">
-                <p className="truncate font-medium">{file.name}</p>
+                <p className="truncate font-mono font-medium">{file.name}</p>
                 <p className="mt-0.5 text-xs text-muted">
                   {stats.desktops} 个桌面 · {stats.sites} 张卡片 · {stats.links} 个链接
                   {exportedAt && !Number.isNaN(exportedAt.getTime()) && ` · 导出于 ${exportedAt.toLocaleDateString()}`}
                 </p>
                 <p className="mt-1.5 flex flex-wrap gap-1">
                   {file.backup.desktops.map((item, index) => (
-                    <span key={index} className="max-w-full truncate rounded-full bg-fg/6 px-2 py-0.5 text-xs text-muted">
+                    <span key={index} className="max-w-full truncate rounded-pill bg-fg/6 px-2 py-0.5 text-xs text-muted">
                       {item.name}
                     </span>
                   ))}
@@ -169,12 +169,12 @@ function Content({ onClose, desktops, desktop, onImported }: Omit<Props, 'open'>
                   role="radio"
                   aria-checked={option.value === mode}
                   disabled={importing}
-                  className={`rounded-xl border px-3 py-2 text-left transition outline-none focus-visible:ring-2 focus-visible:ring-accent/50 ${
+                  className={`rounded-control border-[length:var(--border-w)] px-3 py-2 text-left transition outline-none focus-visible:ring-2 focus-visible:ring-accent/50 ${
                     option.value !== mode
                       ? 'border-line hover:bg-fg/4'
                       : option.value === 'replace'
                         ? 'border-danger/50 bg-danger/8'
-                        : 'border-accent/50 bg-accent-soft'
+                        : 'border-accent/60 bg-accent-soft'
                   }`}
                   onClick={() => setMode(option.value)}
                 >
