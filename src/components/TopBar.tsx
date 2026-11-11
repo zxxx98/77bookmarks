@@ -70,7 +70,7 @@ export function TopBar({ desktops, desktop, onSwitchDesktop, onStepDesktop, onVi
           <input
             ref={searchRef}
             type="search"
-            className="input h-9 pr-3 pl-9 sm:pr-9 [&::-webkit-search-cancel-button]:hidden"
+            className="input h-9 pr-3 pl-9 [&::-webkit-search-cancel-button]:hidden"
             placeholder="搜索书签"
             aria-label="搜索书签"
             value={query}
@@ -83,9 +83,6 @@ export function TopBar({ desktops, desktop, onSwitchDesktop, onStepDesktop, onVi
               }
             }}
           />
-          <kbd className="pointer-events-none absolute top-1/2 right-2.5 hidden -translate-y-1/2 rounded-pill border border-line bg-surface px-1.5 font-mono text-[11px] leading-4 text-faint sm:block">
-            /
-          </kbd>
         </div>
 
         {/* On narrow screens the layout and theme controls move into the menu */}

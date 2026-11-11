@@ -133,9 +133,6 @@ function Home({ board }: { board: Board }) {
         event.preventDefault()
         setQuery((current) => current + event.key)
         searchRef.current?.focus()
-      } else if (event.key === '/') {
-        event.preventDefault()
-        searchRef.current?.focus()
       } else if (event.key === 'Tab' && desktops.length > 1) {
         event.preventDefault()
         stepDesktop(event.shiftKey ? -1 : 1)
