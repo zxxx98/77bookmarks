@@ -1,6 +1,6 @@
 import { ImageUp, LoaderCircle, RefreshCw, Trash2 } from 'lucide-react'
 import { useRef, useState, type ChangeEvent, type FormEvent } from 'react'
-import type { Desktop, Site } from '../../shared/types'
+import type { Desktop, DesktopSummary, Site } from '../../shared/types'
 import { hostOf, parseIconUrl } from '../../shared/url'
 import { api } from '../api'
 import { Dialog, useAct, useUi } from '../ui'
@@ -32,7 +32,7 @@ interface Props {
   /** The card being edited, which is on `desktop` */
   site: Site | null
   desktop: Desktop
-  desktops: Desktop[]
+  desktops: DesktopSummary[]
   onClose: () => void
 }
 
@@ -49,7 +49,7 @@ const pill = (selected: boolean) =>
     selected ? 'border-accent/60 bg-accent-soft font-medium text-accent' : 'border-line text-muted hover:text-fg'
   }`
 
-function Editor({ site, desktop, desktops }: { site: Site; desktop: Desktop; desktops: Desktop[] }) {
+function Editor({ site, desktop, desktops }: { site: Site; desktop: Desktop; desktops: DesktopSummary[] }) {
   const groups = desktop.groups
   const act = useAct()
   const { toast } = useUi()

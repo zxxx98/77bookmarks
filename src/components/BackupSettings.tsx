@@ -1,13 +1,13 @@
 import { Download, FileJson, LoaderCircle, Upload, X } from 'lucide-react'
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { backupStats, parseBackup, type ParsedBackup } from '../../shared/backup'
-import type { Desktop, ImportMode } from '../../shared/types'
+import type { Desktop, DesktopSummary, ImportMode } from '../../shared/types'
 import { api } from '../api'
 import { useAct, useUi } from '../ui'
 
 interface Props {
   onClose: () => void
-  desktops: Desktop[]
+  desktops: DesktopSummary[]
   desktop: Desktop
   /** Called with the first imported desktop once an import has finished */
   onImported: (desktopId: number) => void

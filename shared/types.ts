@@ -41,6 +41,22 @@ export interface Board {
   desktops: Desktop[]
 }
 
+/** Navigation metadata; bookmarks are only sent for the selected desktop. */
+export interface DesktopSummary extends Omit<Desktop, 'groups'> {
+  groupCount: number
+  siteCount: number
+}
+
+export interface BoardPage {
+  desktops: DesktopSummary[]
+  desktop: Desktop
+}
+
+export interface DesktopMatch {
+  desktopId: number
+  count: number
+}
+
 export interface AddResult {
   result: 'site_created' | 'site_exists' | 'link_added' | 'link_exists'
   siteId: number

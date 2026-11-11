@@ -1,6 +1,6 @@
 import { Check, ChevronDown, CornerDownLeft, Ellipsis, LockKeyhole, LogOut, Monitor, Moon, Palette, Pencil, Plus, Settings, Sun, X } from 'lucide-react'
 import type { RefObject } from 'react'
-import type { Desktop, View } from '../../shared/types'
+import type { Desktop, DesktopSummary, View } from '../../shared/types'
 import { SEARCH_ENGINES, SearchEngineIcon, useSearchEngine, type SearchEngineId } from '../engines'
 import { STYLE_PRESETS, useStyle, useTheme, type StyleId, type StylePreset, type Theme } from '../theme'
 import { usePopover } from '../ui'
@@ -37,7 +37,7 @@ export function Logo({ size = 32 }: { size?: number }) {
 
 interface Props {
   siteName: string
-  desktops: Desktop[]
+  desktops: DesktopSummary[]
   desktop: Desktop
   onSwitchDesktop: (desktopId: number) => void
   onStepDesktop: (step: 1 | -1) => void

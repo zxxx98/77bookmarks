@@ -4,12 +4,13 @@ import { CSS } from '@dnd-kit/utilities'
 import { useQueryClient } from '@tanstack/react-query'
 import { ChevronDown, ChevronLeft, ChevronRight, GripVertical, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
-import type { Board, Desktop } from '../../shared/types'
+import type { Desktop, DesktopSummary } from '../../shared/types'
 import { api } from '../api'
+import { updateBoardCache } from '../board-cache'
 import { useAct, usePopover, useUi } from '../ui'
 
 interface Props {
-  desktops: Desktop[]
+  desktops: DesktopSummary[]
   active: Desktop
   onSwitch: (desktopId: number) => void
   /** Moves to the previous (-1) or next (1) desktop, wrapping around */
@@ -49,7 +50,7 @@ export function DesktopSwitcher({ desktops, active, onSwitch, onStep }: Props) {
       desktops.findIndex((d) => d.id === dragged.id),
       desktops.findIndex((d) => d.id === over.id),
     )
-    queryClient.setQueryData<Board>(['board'], { desktops: next })
+    updateBoardCache(queryClient, (page) => ({ ...page, desktops: next }))
     api.order({ desktops: next.map((d) => d.id) }).catch((error: Error) => {
       toast(error.message, 'error')
       return queryClient.invalidateQueries({ queryKey: ['board'] })
@@ -127,7 +128,7 @@ export function DesktopSwitcher({ desktops, active, onSwitch, onStep }: Props) {
 }
 
 interface RowProps {
-  desktop: Desktop
+  desktop: DesktopSummary
   index: number
   current: boolean
   removable: boolean
@@ -140,7 +141,7 @@ function DesktopRow({ desktop, index, current, removable, onSwitch, onClose }: R
   const { confirm } = useUi()
   const [renaming, setRenaming] = useState(false)
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id: desktop.id })
-  const siteCount = desktop.groups.reduce((count, group) => count + group.sites.length, 0)
+  const siteCount = desktop.siteCount
 
   const rename = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -153,7 +154,7 @@ function DesktopRow({ desktop, index, current, removable, onSwitch, onClose }: R
     onClose()
     const ok = await confirm({
       title: `删除桌面「${desktop.name}」？`,
-      message: siteCount ? `桌面上的 ${desktop.groups.length} 个分组、${siteCount} 张卡片及其链接会一并删除，且无法恢复。` : undefined,
+      message: siteCount ? `桌面上的 ${desktop.groupCount} 个分组、${siteCount} 张卡片及其链接会一并删除，且无法恢复。` : undefined,
       confirmText: '删除',
       danger: true,
     })

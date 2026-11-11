@@ -2,29 +2,39 @@ import { useQueryClient } from '@tanstack/react-query'
 import { DatabaseBackup, LoaderCircle, Settings } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { MAX_SITE_NAME_LENGTH, type SystemSettings } from '../../shared/settings'
-import type { Desktop } from '../../shared/types'
+import type { Desktop, DesktopSummary } from '../../shared/types'
 import { api } from '../api'
 import { Dialog, useUi } from '../ui'
 import { BackupSettings } from './BackupSettings'
 
 interface Props {
   open: boolean
+  ready: boolean
+  loadError: boolean
+  onRetry: () => void
   onClose: () => void
   settings: SystemSettings
-  desktops: Desktop[]
+  desktops: DesktopSummary[]
   desktop: Desktop
   onImported: (desktopId: number) => void
 }
 
-export function SettingsDialog({ open, ...props }: Props) {
+export function SettingsDialog({ open, ready, loadError, onRetry, ...props }: Props) {
   return (
     <Dialog open={open} onClose={props.onClose} title="系统设置" width="max-w-lg">
-      <Content {...props} />
+      {ready ? <Content {...props} /> : (
+        <div className="grid place-items-center gap-3 py-8 text-sm text-muted" role="status">
+          {loadError ? <>
+            <p>设置加载失败</p>
+            <button className="btn btn-soft" onClick={onRetry}>重试</button>
+          </> : <><LoaderCircle className="animate-spin" /><p>正在加载设置…</p></>}
+        </div>
+      )}
     </Dialog>
   )
 }
 
-function Content({ settings, ...backupProps }: Omit<Props, 'open'>) {
+function Content({ settings, ...backupProps }: Omit<Props, 'open' | 'ready' | 'loadError' | 'onRetry'>) {
   const queryClient = useQueryClient()
   const { toast } = useUi()
   const [tab, setTab] = useState<'general' | 'backup'>('general')

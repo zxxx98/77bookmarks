@@ -37,7 +37,10 @@ export function useAct() {
         toast(error instanceof Error ? error.message : '操作失败', 'error')
         return false
       } finally {
-        await queryClient.invalidateQueries({ queryKey: ['board'] })
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['board'] }),
+          queryClient.invalidateQueries({ queryKey: ['board-search'] }),
+        ])
       }
     },
     [queryClient, toast],

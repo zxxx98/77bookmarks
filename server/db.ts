@@ -1,20 +1,22 @@
-import { isView, type Board, type Desktop, type Group, type Site } from '../shared/types'
+import { isView, type Board, type BoardPage, type Desktop, type DesktopSummary, type Group, type Site } from '../shared/types'
 
 export const MAX_ICON_BYTES = 100 * 1024
 export const MAX_DESKTOPS = 20
 export const DEFAULT_DESKTOP = '主桌面'
 const DEFAULT_GROUP = '默认'
 
-export async function loadBoard(db: D1Database): Promise<Board> {
+export async function loadBoard(db: D1Database, desktopId?: number): Promise<Board> {
+  const scoped = (sql: string, filter: string) => desktopId === undefined ? db.prepare(sql) : db.prepare(filter).bind(desktopId)
   const [desktopRows, groupRows, siteRows, linkRows] = await db.batch<Record<string, unknown>>([
-    db.prepare('SELECT id, name, view FROM desktops ORDER BY position, id'),
-    db.prepare('SELECT id, desktop_id, name FROM groups ORDER BY position, id'),
-    db.prepare('SELECT id, group_id, origin, title, icon_version, icon_url FROM sites ORDER BY position, id'),
-    db.prepare('SELECT id, site_id, path, title FROM links ORDER BY position, id'),
+    scoped('SELECT id, name, view FROM desktops ORDER BY position, id', 'SELECT id, name, view FROM desktops WHERE id = ?'),
+    scoped('SELECT id, desktop_id, name FROM groups ORDER BY position, id', 'SELECT id, desktop_id, name FROM groups WHERE desktop_id = ? ORDER BY position, id'),
+    scoped('SELECT id, group_id, origin, title, icon_version, icon_url FROM sites ORDER BY position, id', 'SELECT id, group_id, origin, title, icon_version, icon_url FROM sites WHERE desktop_id = ? ORDER BY position, id'),
+    scoped('SELECT id, site_id, path, title FROM links ORDER BY position, id', 'SELECT l.id, l.site_id, l.path, l.title FROM links l JOIN sites s ON s.id = l.site_id WHERE s.desktop_id = ? ORDER BY l.position, l.id'),
   ])
 
   // The app always shows one desktop, so make sure there is one to show
   if (desktopRows.results.length === 0) {
+    if (desktopId !== undefined) return { desktops: [] }
     await db.prepare('INSERT INTO desktops (name, position, created_at) VALUES (?, 0, ?)').bind(DEFAULT_DESKTOP, Date.now()).run()
     return loadBoard(db)
   }
@@ -50,6 +52,23 @@ export async function loadBoard(db: D1Database): Promise<Board> {
     })
   }
   return { desktops: [...desktops.values()] }
+}
+
+export async function loadBoardPage(db: D1Database, requestedId: number | null): Promise<BoardPage> {
+  const rows = await db.prepare(`SELECT d.id, d.name, d.view,
+    (SELECT COUNT(*) FROM groups g WHERE g.desktop_id = d.id) AS groupCount,
+    (SELECT COUNT(*) FROM sites s WHERE s.desktop_id = d.id) AS siteCount
+    FROM desktops d ORDER BY d.position, d.id`).all<DesktopSummary>()
+  if (!rows.results.length) {
+    await loadBoard(db)
+    return loadBoardPage(db, requestedId)
+  }
+  const desktops = rows.results.map((row) => ({ ...row, view: isView(row.view) ? row.view : 'large' as const }))
+  const selected = desktops.find((desktop) => desktop.id === requestedId) ?? desktops[0]
+  const board = await loadBoard(db, selected.id)
+  // A desktop may have been deleted by another tab between the two reads.
+  if (!board.desktops[0]) return loadBoardPage(db, null)
+  return { desktops, desktop: board.desktops[0] }
 }
 
 const PARENT_COLUMN = { desktops: null, groups: 'desktop_id', sites: 'group_id', links: 'site_id' } as const

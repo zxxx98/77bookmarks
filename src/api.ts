@@ -1,5 +1,6 @@
-import type { AddResult, Board, ImportMode, ImportResult, OrderInput, View } from '../shared/types'
+import type { AddResult, BoardPage, DesktopMatch, ImportMode, ImportResult, OrderInput, View } from '../shared/types'
 import type { SystemSettings } from '../shared/settings'
+import { rememberSettings } from './settings'
 
 export class ApiError extends Error {
   constructor(
@@ -30,9 +31,10 @@ async function request<T = { ok: true }>(path: string, method = 'GET', body?: un
 export const api = {
   login: (password: string) => request('/login', 'POST', { password }),
   logout: () => request('/logout', 'POST'),
-  board: () => request<Board>('/board'),
-  settings: () => request<SystemSettings>('/settings'),
-  updateSettings: (settings: SystemSettings) => request<SystemSettings>('/settings', 'PUT', settings),
+  board: (desktopId: number) => request<BoardPage>(`/board${desktopId > 0 ? `?desktop=${desktopId}` : ''}`),
+  search: (query: string) => request<DesktopMatch[]>(`/search?q=${encodeURIComponent(query)}`),
+  settings: () => request<SystemSettings>('/settings').then(rememberSettings),
+  updateSettings: (settings: SystemSettings) => request<SystemSettings>('/settings', 'PUT', settings).then(rememberSettings),
   addBookmark: (url: string, desktopId: number, groupId?: number) => request<AddResult>('/bookmarks', 'POST', { url, desktopId, groupId }),
   order: (order: OrderInput) => request('/order', 'PUT', order),
 

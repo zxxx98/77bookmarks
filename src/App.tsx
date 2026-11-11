@@ -1,11 +1,12 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowUpRight, BookmarkPlus, LoaderCircle, SearchX } from 'lucide-react'
 import { motion } from 'motion/react'
 import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from 'react'
-import { DEFAULT_SETTINGS, type SystemSettings } from '../shared/settings'
-import type { Board, View } from '../shared/types'
+import type { SystemSettings } from '../shared/settings'
+import type { BoardPage, View } from '../shared/types'
 import { parseBookmarkUrl } from '../shared/url'
 import { api, ApiError } from './api'
+import { updateBoardCache } from './board-cache'
 import { AddBookmarkDialog } from './components/AddBookmarkDialog'
 import { BoardView } from './components/BoardView'
 import { EditSiteDialog } from './components/EditSiteDialog'
@@ -14,6 +15,7 @@ import { SettingsDialog } from './components/SettingsDialog'
 import { TopBar } from './components/TopBar'
 import { SEARCH_ENGINES, SearchEngineIcon, useSearchEngine } from './engines'
 import { searchBoard } from './search'
+import { readSettings } from './settings'
 import { UiProvider, useUi } from './ui'
 
 const DESKTOP_KEY = 'desktop'
@@ -32,24 +34,53 @@ function canUseGlobalShortcut(event: KeyboardEvent | ClipboardEvent) {
 }
 
 export default function App() {
+  const queryClient = useQueryClient()
+  const [desktopId, setDesktopId] = useState(() => Number(localStorage.getItem(DESKTOP_KEY)))
   const [lockMode, setLockMode] = useState(storedLockMode)
+  const previousPage = useRef<BoardPage | undefined>(undefined)
   const logoutFlight = useRef<Promise<unknown>>(Promise.resolve())
-  const board = useQuery({ queryKey: ['board'], queryFn: api.board, retry: false, enabled: !lockMode })
-  const settings = useQuery({ queryKey: ['settings'], queryFn: api.settings })
-  const systemSettings = settings.data ?? DEFAULT_SETTINGS
+  const board = useQuery({
+    queryKey: ['board', desktopId],
+    queryFn: () => api.board(desktopId),
+    retry: false,
+    enabled: !lockMode,
+    placeholderData: keepPreviousData,
+  })
+  const settings = useQuery({ queryKey: ['settings'], queryFn: api.settings, placeholderData: readSettings })
+  const systemSettings = settings.data ?? readSettings()
   const { siteName } = systemSettings
 
   useEffect(() => {
     document.title = siteName
   }, [siteName])
 
+  const clearBookmarks = useCallback(() => {
+    previousPage.current = undefined
+    void queryClient.cancelQueries({ queryKey: ['board'] })
+    void queryClient.cancelQueries({ queryKey: ['board-search'] })
+    queryClient.removeQueries({ queryKey: ['board'] })
+    queryClient.removeQueries({ queryKey: ['board-search'] })
+  }, [queryClient])
+
+  useEffect(() => {
+    if (lockMode || !board.data || board.isPlaceholderData) return
+    previousPage.current = board.data
+    const resolvedId = board.data.desktop.id
+    localStorage.setItem(DESKTOP_KEY, String(resolvedId))
+    if (desktopId !== resolvedId) {
+      queryClient.setQueryData(['board', resolvedId], board.data)
+      setDesktopId(resolvedId)
+    }
+  }, [board.data, board.isPlaceholderData, desktopId, queryClient, lockMode])
+
   const endSession = useCallback((mode: LockMode) => {
     // Hide the board immediately, and persist the lock before contacting the server.
     localStorage.setItem(LOCK_KEY, mode)
     setLockMode(mode)
+    clearBookmarks()
     // Login waits for logout, so a slow logout cannot erase the newly issued cookie.
     logoutFlight.current = api.logout().catch(() => undefined)
-  }, [])
+  }, [clearBookmarks])
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -68,8 +99,10 @@ export default function App() {
     const onStorage = (event: StorageEvent) => {
       if (event.key !== LOCK_KEY && event.key !== null) return
       const mode = storedLockMode()
-      if (mode) setLockMode(mode)
-      else {
+      if (mode) {
+        setLockMode(mode)
+        clearBookmarks()
+      } else {
         // Another tab has verified the password; refresh before showing its session.
         void board.refetch().then((result) => {
           if (!result.error && !storedLockMode()) setLockMode(null)
@@ -78,7 +111,7 @@ export default function App() {
     }
     window.addEventListener('storage', onStorage)
     return () => window.removeEventListener('storage', onStorage)
-  }, [board.refetch])
+  }, [board.refetch, clearBookmarks])
 
   const loggedIn = async () => {
     const result = await board.refetch()
@@ -90,12 +123,26 @@ export default function App() {
   if (lockMode || (board.error instanceof ApiError && board.error.status === 401)) {
     return <LoginPage siteName={siteName} locked={lockMode === 'locked'} beforeLogin={() => logoutFlight.current} onSuccess={loggedIn} />
   }
-  if (board.data && !settings.isPending) return (
+  const page = board.data ?? previousPage.current
+  if (page) return (
     <UiProvider>
-      <Home board={board.data} settings={systemSettings} onLock={() => endSession('locked')} onLogout={() => endSession('signed-out')} />
+      <Home
+        board={page}
+        desktopId={desktopId}
+        onSelectDesktop={setDesktopId}
+        loading={board.isPlaceholderData || !board.data}
+        loadError={!board.data ? board.error?.message : undefined}
+        onRetryBoard={() => { void board.refetch() }}
+        settingsReady={settings.isSuccess && !settings.isPlaceholderData}
+        settingsError={settings.isError}
+        onRetrySettings={() => { void settings.refetch() }}
+        settings={systemSettings}
+        onLock={() => endSession('locked')}
+        onLogout={() => endSession('signed-out')}
+      />
     </UiProvider>
   )
-  if (board.isPending || settings.isPending) {
+  if (board.isPending) {
     return (
       <main className="grid min-h-dvh place-items-center">
         <LoaderCircle className="animate-spin text-faint" />
@@ -114,7 +161,22 @@ export default function App() {
   )
 }
 
-function Home({ board, settings, onLock, onLogout }: { board: Board; settings: SystemSettings; onLock: () => void; onLogout: () => void }) {
+interface HomeProps {
+  board: BoardPage
+  desktopId: number
+  onSelectDesktop: (id: number) => void
+  loading: boolean
+  loadError?: string
+  onRetryBoard: () => void
+  settingsReady: boolean
+  settingsError: boolean
+  onRetrySettings: () => void
+  settings: SystemSettings
+  onLock: () => void
+  onLogout: () => void
+}
+
+function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBoard, settingsReady, settingsError, onRetrySettings, settings, onLock, onLogout }: HomeProps) {
   const { siteName, openInNewTab } = settings
   const queryClient = useQueryClient()
   const { toast } = useUi()
@@ -128,19 +190,15 @@ function Home({ board, settings, onLock, onLogout }: { board: Board; settings: S
   const searchRef = useRef<HTMLInputElement>(null)
 
   // The desktop shown is remembered per browser. A remembered one that no longer exists falls back to the first
-  const [desktopId, setDesktopId] = useState(() => Number(localStorage.getItem(DESKTOP_KEY)))
   const { desktops } = board
   const desktopIndex = Math.max(
     0,
-    desktops.findIndex((d) => d.id === desktopId),
+    desktops.findIndex((d) => d.id === (loading ? desktopId : board.desktop.id)),
   )
-  const desktop = desktops[desktopIndex]
+  const selected = desktops.find((d) => d.id === desktopId)
+  const desktop = loading ? { ...(selected ?? { id: desktopId, name: '加载中…', view: 'large' as View }), groups: [] } : board.desktop
   /** Side the next desktop slides in from: 1 from the right, -1 from the left, 0 on first load */
   const [slide, setSlide] = useState(0)
-
-  useEffect(() => {
-    localStorage.setItem(DESKTOP_KEY, String(desktop.id))
-  }, [desktop.id])
 
   const switchDesktop = useCallback(
     (id: number, direction?: 1 | -1) => {
@@ -148,11 +206,13 @@ function Home({ board, settings, onLock, onLogout }: { board: Board; settings: S
       if (id === desktop.id) return
       // A desktop that isn't loaded yet (just created or imported) is always further right
       setSlide(direction ?? (index < 0 || index > desktopIndex ? 1 : -1))
-      setDesktopId(id)
+      onSelectDesktop(id)
+      setEditing(false)
+      setAddingUrl(null)
       setEditingSiteId(null)
       window.scrollTo({ top: 0 })
     },
-    [desktops, desktop.id, desktopIndex],
+    [desktops, desktop.id, desktopIndex, onSelectDesktop],
   )
 
   const stepDesktop = useCallback(
@@ -167,7 +227,7 @@ function Home({ board, settings, onLock, onLogout }: { board: Board; settings: S
   const setView = useCallback(
     (view: View) => {
       const id = desktop.id
-      queryClient.setQueryData<Board>(['board'], (current) => current && { desktops: current.desktops.map((d) => (d.id === id ? { ...d, view } : d)) })
+      updateBoardCache(queryClient, (page) => ({ ...page, desktops: page.desktops.map((d) => d.id === id ? { ...d, view } : d), desktop: page.desktop.id === id ? { ...page.desktop, view } : page.desktop }))
       viewSaves.current = viewSaves.current
         .then(() => api.updateDesktop(id, { view }))
         .catch((error: Error) => {
@@ -179,14 +239,22 @@ function Home({ board, settings, onLock, onLogout }: { board: Board; settings: S
   )
   const result = useMemo(() => searchBoard(desktop.groups, query), [desktop.groups, query])
   const searching = query.trim() !== ''
-  /** Matches on the desktops that aren't shown */
+  // Only aggregate counts cross the network while searching another desktop.
+  const [searchTerm, setSearchTerm] = useState('')
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchTerm(query.trim()), 200)
+    return () => clearTimeout(timer)
+  }, [query])
+  const otherMatches = useQuery({ queryKey: ['board-search', searchTerm], queryFn: () => api.search(searchTerm), enabled: !!searchTerm && desktops.length > 1, retry: false })
   const elsewhere = useMemo(() => {
-    if (!searching) return []
-    return desktops
-      .filter((d) => d.id !== desktop.id)
-      .map((d) => ({ desktop: d, count: searchBoard(d.groups, query).groups.reduce((count, group) => count + group.sites.length, 0) }))
-      .filter((entry) => entry.count > 0)
-  }, [desktops, desktop.id, query, searching])
+    if (!searching || searchTerm !== query.trim()) return []
+    return (otherMatches.data ?? [])
+      .filter((match) => match.desktopId !== desktop.id)
+      .flatMap((match) => {
+        const item = desktops.find((d) => d.id === match.desktopId)
+        return item ? [{ desktop: item, count: match.count }] : []
+      })
+  }, [otherMatches.data, desktops, desktop.id, query, searchTerm, searching])
   const editingSite = desktop.groups.flatMap((g) => g.sites).find((s) => s.id === editingSiteId) ?? null
 
   useEffect(() => {
@@ -217,7 +285,7 @@ function Home({ board, settings, onLock, onLogout }: { board: Board; settings: S
       const url = event.clipboardData?.getData('text/plain').trim()
       if (!url || !parseBookmarkUrl(url)) return
       event.preventDefault()
-      setAddingUrl(url)
+      if (!loading) setAddingUrl(url)
     }
     window.addEventListener('keydown', onKey)
     window.addEventListener('paste', onPaste)
@@ -225,7 +293,7 @@ function Home({ board, settings, onLock, onLogout }: { board: Board; settings: S
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('paste', onPaste)
     }
-  }, [desktops.length, editing, stepDesktop])
+  }, [desktops.length, editing, stepDesktop, loading])
 
   // A horizontal swipe switches desktops on touch screens. Off in edit mode, where touches drag cards
   const touchStart = useRef<{ x: number; y: number } | null>(null)
@@ -280,8 +348,8 @@ function Home({ board, settings, onLock, onLogout }: { board: Board; settings: S
         onSearchBookmark={handleSearchBookmark}
         searchRef={searchRef}
         editing={editing}
-        onToggleEditing={() => setEditing(!editing)}
-        onAdd={() => setAddingUrl('')}
+        onToggleEditing={() => !loading && setEditing(!editing)}
+        onAdd={() => !loading && setAddingUrl('')}
         onSettings={() => setSettingsOpen(true)}
         onLock={onLock}
         onLogout={onLogout}
@@ -293,7 +361,14 @@ function Home({ board, settings, onLock, onLogout }: { board: Board; settings: S
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.28, ease: [0.2, 0.8, 0.2, 1] }}
         >
-          {empty && !editing && !searching ? (
+          {loading ? (
+            <div role="status" aria-label={loadError ? '桌面加载失败' : '正在加载桌面'} className="grid place-items-center gap-3 py-28">
+              {loadError ? <>
+                <p className="text-sm text-muted">加载失败：{loadError}</p>
+                <button className="btn btn-soft" onClick={onRetryBoard}>重试</button>
+              </> : <LoaderCircle className="animate-spin text-faint" />}
+            </div>
+          ) : empty && !editing && !searching ? (
             <div className="grid animate-rise place-items-center py-28 text-center">
               <span className="mb-4 grid size-14 place-items-center rounded-card border-[length:var(--border-w)] border-line bg-accent-soft text-accent">
                 <BookmarkPlus size={26} />
@@ -369,7 +444,7 @@ function Home({ board, settings, onLock, onLogout }: { board: Board; settings: S
       </main>
       <AddBookmarkDialog open={addingUrl !== null} initialUrl={addingUrl ?? ''} onClose={() => setAddingUrl(null)} desktop={desktop} />
       <EditSiteDialog site={editingSite} desktop={desktop} desktops={desktops} onClose={() => setEditingSiteId(null)} />
-      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} settings={settings} desktops={desktops} desktop={desktop} onImported={switchDesktop} />
+      <SettingsDialog ready={settingsReady} loadError={settingsError} onRetry={onRetrySettings} open={settingsOpen} onClose={() => setSettingsOpen(false)} settings={settings} desktops={desktops} desktop={desktop} onImported={switchDesktop} />
     </>
   )
 }

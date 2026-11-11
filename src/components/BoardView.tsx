@@ -17,8 +17,9 @@ import { CSS } from '@dnd-kit/utilities'
 import { useQueryClient } from '@tanstack/react-query'
 import { Check, GripVertical, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react'
-import type { Board, Desktop, Group, Site, View } from '../../shared/types'
+import type { Desktop, Group, Site, View } from '../../shared/types'
 import { api } from '../api'
+import { updateBoardCache } from '../board-cache'
 import { useAct, useUi } from '../ui'
 import { SiteCard } from './SiteCard'
 
@@ -242,7 +243,7 @@ export function BoardView({ desktop, groups, editing, sortable, matchedLinks, on
     setActiveSite(null)
     if (next === groups) return
 
-    queryClient.setQueryData<Board>(['board'], (board) => board && { desktops: board.desktops.map((d) => (d.id === desktop.id ? { ...d, groups: next } : d)) })
+    updateBoardCache(queryClient, (page) => page.desktop.id === desktop.id ? { ...page, desktop: { ...page.desktop, groups: next } } : page)
     api
       .order({ groups: next.map((g) => g.id), sites: next.map((g) => ({ groupId: g.id, ids: g.sites.map((s) => s.id) })) })
       .catch((error: Error) => {

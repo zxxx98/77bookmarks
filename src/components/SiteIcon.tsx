@@ -59,6 +59,8 @@ export function SiteIcon({ site, size = 40 }: { site: Pick<Site, 'id' | 'origin'
           key={src}
           src={src}
           alt=""
+          loading="lazy"
+          decoding="async"
           draggable={false}
           // Custom icons live on other sites, which don't need to know where they are shown
           referrerPolicy="no-referrer"
