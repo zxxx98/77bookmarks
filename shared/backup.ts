@@ -12,6 +12,8 @@ export interface BackupSite {
 
 export interface BackupGroup {
   name: string
+  /** Absent in files written before groups could be pinned */
+  pinned?: boolean
   sites: BackupSite[]
 }
 
@@ -84,7 +86,7 @@ function parseGroups(input: unknown): BackupGroup[] | string {
       if (iconUrl) result.iconUrl = iconUrl
       sites.push(result)
     }
-    groups.push({ name, sites })
+    groups.push({ name, ...(group.pinned === true ? { pinned: true } : {}), sites })
   }
   return groups
 }

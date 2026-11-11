@@ -14,6 +14,7 @@ describe('collectLazyIconCandidates', () => {
         {
           id: 10,
           name: '分组 1',
+          pinned: false,
           sites: [
             { id: 101, origin: 'https://site1.com', title: 'Site 1', iconVersion: 0, iconUrl: null, links: [] },
             { id: 102, origin: 'https://site2.com', title: 'Site 2', iconVersion: 12345, iconUrl: null, links: [] },
@@ -44,6 +45,7 @@ describe('collectLazyIconCandidates', () => {
           {
             id: 10,
             name: '分组',
+            pinned: false,
             sites: [
               { id: 101, origin: 'https://site1.com', title: 'Site 1', iconVersion: 0, iconUrl: null, links: [] },
               { id: 102, origin: 'https://site2.com', title: 'Site 2', iconVersion: 0, iconUrl: null, links: [] },

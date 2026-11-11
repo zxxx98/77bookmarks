@@ -9,7 +9,7 @@ export async function loadBoard(db: D1Database, desktopId?: number): Promise<Boa
   const scoped = (sql: string, filter: string) => desktopId === undefined ? db.prepare(sql) : db.prepare(filter).bind(desktopId)
   const [desktopRows, groupRows, siteRows, linkRows] = await db.batch<Record<string, unknown>>([
     scoped('SELECT id, name, view FROM desktops ORDER BY position, id', 'SELECT id, name, view FROM desktops WHERE id = ?'),
-    scoped('SELECT id, desktop_id, name FROM groups ORDER BY position, id', 'SELECT id, desktop_id, name FROM groups WHERE desktop_id = ? ORDER BY position, id'),
+    scoped('SELECT id, desktop_id, name, pinned FROM groups ORDER BY pinned DESC, position, id', 'SELECT id, desktop_id, name, pinned FROM groups WHERE desktop_id = ? ORDER BY pinned DESC, position, id'),
     scoped('SELECT id, group_id, origin, title, icon_version, icon_url FROM sites ORDER BY position, id', 'SELECT id, group_id, origin, title, icon_version, icon_url FROM sites WHERE desktop_id = ? ORDER BY position, id'),
     scoped('SELECT id, site_id, path, title FROM links ORDER BY position, id', 'SELECT l.id, l.site_id, l.path, l.title FROM links l JOIN sites s ON s.id = l.site_id WHERE s.desktop_id = ? ORDER BY l.position, l.id'),
   ])
@@ -27,7 +27,7 @@ export async function loadBoard(db: D1Database, desktopId?: number): Promise<Boa
   }
   const groups = new Map<number, Group>()
   for (const row of groupRows.results) {
-    const group: Group = { id: row.id as number, name: row.name as string, sites: [] }
+    const group: Group = { id: row.id as number, name: row.name as string, pinned: !!row.pinned, sites: [] }
     groups.set(group.id, group)
     desktops.get(row.desktop_id as number)?.groups.push(group)
   }
@@ -91,9 +91,9 @@ export async function resolveDesktopId(db: D1Database, requested: unknown): Prom
   return first?.id ?? null
 }
 
-/** The first group of a desktop, created when the desktop has none */
+/** The first group of a desktop as it is shown, created when the desktop has none */
 export async function firstGroupId(db: D1Database, desktopId: number): Promise<number> {
-  const first = await db.prepare('SELECT id FROM groups WHERE desktop_id = ? ORDER BY position, id LIMIT 1').bind(desktopId).first<{ id: number }>()
+  const first = await db.prepare('SELECT id FROM groups WHERE desktop_id = ? ORDER BY pinned DESC, position, id LIMIT 1').bind(desktopId).first<{ id: number }>()
   if (first) return first.id
   const created = await db
     .prepare('INSERT INTO groups (desktop_id, name, position, created_at) VALUES (?, ?, 0, ?)')

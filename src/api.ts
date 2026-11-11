@@ -45,6 +45,7 @@ export const api = {
 
   createGroup: (desktopId: number, name: string) => request('/groups', 'POST', { desktopId, name }),
   renameGroup: (id: number, name: string) => request(`/groups/${id}`, 'PATCH', { name }),
+  pinGroup: (id: number, pinned: boolean) => request(`/groups/${id}`, 'PATCH', { pinned }),
   deleteGroup: (id: number) => request(`/groups/${id}`, 'DELETE'),
 
   /** `desktopId` moves the card to the first group of another desktop */

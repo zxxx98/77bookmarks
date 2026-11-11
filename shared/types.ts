@@ -26,6 +26,8 @@ export interface Site {
 export interface Group {
   id: number
   name: string
+  /** Pinned groups are shown before the others on their desktop */
+  pinned: boolean
   sites: Site[]
 }
 

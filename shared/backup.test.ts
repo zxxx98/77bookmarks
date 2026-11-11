@@ -80,6 +80,19 @@ describe('parseBackup', () => {
     expect(b.iconUrl).toBeUndefined()
   })
 
+  it('keeps pinned groups pinned and ignores anything but true', () => {
+    const groups = [
+      { name: 'a', pinned: true, sites: [] },
+      { name: 'b', pinned: 'yes', sites: [] },
+      { name: 'c', sites: [] },
+    ]
+    expect(ok(v2([{ name: 'A', groups }])).desktops[0].groups).toStrictEqual([
+      { name: 'a', pinned: true, sites: [] },
+      { name: 'b', sites: [] },
+      { name: 'c', sites: [] },
+    ])
+  })
+
   it('rejects malformed backups', () => {
     const bad: unknown[] = [
       null,

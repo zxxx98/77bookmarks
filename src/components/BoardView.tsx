@@ -15,8 +15,8 @@ import {
 import { arrayMove, rectSortingStrategy, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { useQueryClient } from '@tanstack/react-query'
-import { Check, ChevronDown, GripVertical, Pencil, Plus, Trash2 } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import { Check, ChevronDown, GripVertical, Pencil, Pin, Plus, Trash2 } from 'lucide-react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import type { Desktop, Group, Site, View } from '../../shared/types'
 import type { LayoutColumns } from '../../shared/settings'
 import { api } from '../api'
@@ -85,15 +85,27 @@ type Ref = { type: 'g' | 's'; id: number }
 const ref = (id: UniqueIdentifier): Ref => ({ type: String(id)[0] as Ref['type'], id: Number(String(id).slice(2)) })
 const groupIndexOfSite = (groups: Group[], siteId: number) => groups.findIndex((g) => g.sites.some((s) => s.id === siteId))
 
-const collisionDetection: CollisionDetection = (args) => {
+const isPinned = (data: { current?: Record<string, unknown> } | undefined) => !!data?.current?.pinned
+
+export const collisionDetection: CollisionDetection = (args) => {
   const groupsOnly = args.droppableContainers.filter((c) => String(c.id)[0] === 'g')
-  if (String(args.active.id)[0] === 'g') return closestCenter({ ...args, droppableContainers: groupsOnly })
+  if (String(args.active.id)[0] === 'g') {
+    // Pinned groups stay ahead of the others, so a group is only sorted among its own kind
+    const pinned = isPinned(args.active.data)
+    return closestCenter({ ...args, droppableContainers: groupsOnly.filter((c) => isPinned(c.data) === pinned) })
+  }
   const sitesOnly = args.droppableContainers.filter((c) => String(c.id)[0] === 's')
   const overSite = pointerWithin({ ...args, droppableContainers: sitesOnly })
   if (overSite.length) return overSite
   // Lets a card be dropped into an empty group or the blank space of another one
   const overGroup = pointerWithin({ ...args, droppableContainers: groupsOnly })
   return overGroup.length ? overGroup : closestCenter({ ...args, droppableContainers: sitesOnly })
+}
+
+/** Scroll-independent position, so that scrolling between two measurements doesn't count as movement */
+const pagePosition = (element: HTMLElement) => {
+  const rect = element.getBoundingClientRect()
+  return { x: rect.left + window.scrollX, y: rect.top + window.scrollY }
 }
 
 const GRID: Record<View, string> = {
@@ -201,6 +213,41 @@ export function BoardView({ desktop, groups, editing, sortable, matchedLinks, co
   )
   const view = draft ?? groups
 
+  // Pinning moves a group across the page, so the groups glide from where they were (FLIP)
+  const sectionEls = useRef(new Map<number, HTMLElement>())
+  const flipFrom = useRef<Map<number, { x: number; y: number }> | null>(null)
+  const registerSection = useCallback((id: number, element: HTMLElement | null) => {
+    if (element) sectionEls.current.set(id, element)
+    else sectionEls.current.delete(id)
+  }, [])
+
+  const togglePin = useCallback(
+    async (group: Group) => {
+      flipFrom.current = new Map([...sectionEls.current].map(([id, element]) => [id, pagePosition(element)]))
+      await act(() => api.pinGroup(group.id, !group.pinned), group.pinned ? `已取消置顶「${group.name}」` : `已置顶「${group.name}」`)
+      // A pin that moved nothing must not animate some later reorder
+      setTimeout(() => {
+        flipFrom.current = null
+      }, 400)
+    },
+    [act],
+  )
+
+  const groupOrder = view.map((g) => g.id).join()
+  useLayoutEffect(() => {
+    const from = flipFrom.current
+    flipFrom.current = null
+    if (!from || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return
+    for (const [id, element] of sectionEls.current) {
+      const before = from.get(id)
+      if (!before || !element.animate) continue
+      const now = pagePosition(element)
+      const dx = before.x - now.x
+      const dy = before.y - now.y
+      if (dx || dy) element.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0, 0)' }], { duration: 320, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' })
+    }
+  }, [groupOrder])
+
   const onDragOver = ({ active, over }: DragOverEvent) => {
     const a = ref(active.id)
     if (!over || a.type !== 's') return
@@ -232,11 +279,9 @@ export function BoardView({ desktop, groups, editing, sortable, matchedLinks, co
       const a = ref(active.id)
       const o = ref(over.id)
       if (a.type === 'g' && o.type === 'g') {
-        next = arrayMove(
-          next,
-          next.findIndex((g) => g.id === a.id),
-          next.findIndex((g) => g.id === o.id),
-        )
+        const from = next.findIndex((g) => g.id === a.id)
+        const to = next.findIndex((g) => g.id === o.id)
+        if (from >= 0 && to >= 0 && next[from].pinned === next[to].pinned) next = arrayMove(next, from, to)
       } else if (a.type === 's' && o.type === 's') {
         const index = groupIndexOfSite(next, a.id)
         if (index >= 0 && index === groupIndexOfSite(next, o.id)) {
@@ -271,6 +316,7 @@ export function BoardView({ desktop, groups, editing, sortable, matchedLinks, co
         const a = ref(active.id)
         if (!editing) onStartEditing?.()
         navigator.vibrate?.(40)
+        flipFrom.current = null
         setDraft(groups)
         setActiveSite(a.type === 's' ? (groups.flatMap((g) => g.sites).find((s) => s.id === a.id) ?? null) : null)
       }}
@@ -298,6 +344,8 @@ export function BoardView({ desktop, groups, editing, sortable, matchedLinks, co
               matchedLinks={matchedLinks}
               collapsed={collapsedGroupIds?.has(group.id) ?? false}
               onToggleCollapse={() => onToggleGroupCollapse?.(group.id)}
+              onTogglePin={togglePin}
+              registerSection={registerSection}
               onEditSite={onEditSite}
               onDeleteSite={removeSite}
               onContextMenu={handleContextMenu}
@@ -357,6 +405,8 @@ function GroupSection({
   matchedLinks,
   collapsed,
   onToggleCollapse,
+  onTogglePin,
+  registerSection,
   onEditSite,
   onDeleteSite,
   onContextMenu,
@@ -366,6 +416,8 @@ function GroupSection({
   view: View
   collapsed: boolean
   onToggleCollapse: () => void
+  onTogglePin: (group: Group) => void
+  registerSection: (id: number, element: HTMLElement | null) => void
   onDeleteSite: (site: Site) => void
   onContextMenu: (e: React.MouseEvent, site: Site) => void
   dragJustEndedRef: React.RefObject<boolean>
@@ -376,8 +428,16 @@ function GroupSection({
   const isCollapsed = collapsed && sortable
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
     id: `g-${group.id}`,
+    data: { pinned: group.pinned },
     disabled: !sortable || !editing,
   })
+  const sectionRef = useCallback(
+    (element: HTMLElement | null) => {
+      setNodeRef(element)
+      registerSection(group.id, element)
+    },
+    [setNodeRef, registerSection, group.id],
+  )
 
   const rename = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -398,11 +458,11 @@ function GroupSection({
 
   return (
     <section
-      ref={setNodeRef}
+      ref={sectionRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
       className={isDragging ? 'relative z-10 min-w-0 opacity-70' : 'min-w-0'}
     >
-      <header className="mb-3 flex h-8 items-center gap-2 px-1">
+      <header className="group/header mb-3 flex h-8 items-center gap-2 px-1">
         {renaming ? (
           <form onSubmit={rename} className="flex items-center gap-1">
             <input
@@ -445,24 +505,45 @@ function GroupSection({
             </span>
           </div>
         )}
-        {editing && !renaming && (
-          <div className="ml-1 flex items-center">
-            <button className="icon-btn-sm" aria-label="重命名分组" onClick={() => setRenaming(true)}>
-              <Pencil size={14} />
+        {!renaming && (
+          <div className="ml-1 flex shrink-0 items-center">
+            {/* Outside layout editing the pin only appears on hover, and stays put once the group is pinned.
+                Touch screens have no hover, so there it is a plain marker and pinning happens in layout editing */}
+            <button
+              className={`icon-btn-sm ${group.pinned ? '!text-accent' : ''} ${
+                editing
+                  ? ''
+                  : group.pinned
+                    ? '[@media(hover:none)]:pointer-events-none'
+                    : 'opacity-0 group-hover/header:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:hidden'
+              }`}
+              title={group.pinned ? '取消置顶' : '置顶分组'}
+              aria-label={group.pinned ? `取消置顶分组「${group.name}」` : `置顶分组「${group.name}」`}
+              aria-pressed={group.pinned}
+              onClick={() => onTogglePin(group)}
+            >
+              <Pin size={14} className={`rotate-45 ${group.pinned ? 'fill-current' : ''}`} />
             </button>
-            <button className="icon-btn-sm hover:!bg-danger/10 hover:!text-danger" aria-label="删除分组" onClick={remove}>
-              <Trash2 size={14} />
-            </button>
-            {sortable && (
-              <button
-                className="icon-btn-sm cursor-grab touch-none active:cursor-grabbing"
-                aria-label="拖动分组排序"
-                data-drag-handle="true"
-                {...attributes}
-                {...listeners}
-              >
-                <GripVertical size={15} />
-              </button>
+            {editing && (
+              <>
+                <button className="icon-btn-sm" aria-label="重命名分组" onClick={() => setRenaming(true)}>
+                  <Pencil size={14} />
+                </button>
+                <button className="icon-btn-sm hover:!bg-danger/10 hover:!text-danger" aria-label="删除分组" onClick={remove}>
+                  <Trash2 size={14} />
+                </button>
+                {sortable && (
+                  <button
+                    className="icon-btn-sm cursor-grab touch-none active:cursor-grabbing"
+                    aria-label="拖动分组排序"
+                    data-drag-handle="true"
+                    {...attributes}
+                    {...listeners}
+                  >
+                    <GripVertical size={15} />
+                  </button>
+                )}
+              </>
             )}
           </div>
         )}

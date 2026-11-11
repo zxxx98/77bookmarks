@@ -43,7 +43,7 @@ export const onRequestPost: Fn = async ({ request, env }) => {
     for (const [groupIndex, group] of desktop.groups.entries()) {
       groupId += 1
       statements.push(
-        db.prepare('INSERT INTO groups (id, desktop_id, name, position, created_at) VALUES (?, ?, ?, ?, ?)').bind(groupId, desktopId, group.name, groupIndex, now),
+        db.prepare('INSERT INTO groups (id, desktop_id, name, pinned, position, created_at) VALUES (?, ?, ?, ?, ?, ?)').bind(groupId, desktopId, group.name, group.pinned ? 1 : 0, groupIndex, now),
       )
 
       for (const [siteIndex, site] of group.sites.entries()) {

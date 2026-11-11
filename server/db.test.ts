@@ -20,7 +20,7 @@ function database() {
     const selected = id === undefined ? desktops : desktops.filter((d) => d.id === id)
     return [
       { results: selected },
-      { results: selected.map((d) => ({ id: d.id * 10, desktop_id: d.id, name: `${d.name}分组` })) },
+      { results: selected.map((d) => ({ id: d.id * 10, desktop_id: d.id, name: `${d.name}分组`, pinned: d.id === 2 ? 1 : 0 })) },
       { results: selected.map((d) => ({ id: d.id * 100, group_id: d.id * 10, title: `${d.name}卡片`, origin: `https://site${d.id}.example`, icon_version: 0, icon_url: null })) },
       { results: selected.map((d) => ({ id: d.id * 1000, site_id: d.id * 100, title: `${d.name}链接`, path: '/path' })) },
     ]
@@ -43,6 +43,15 @@ describe('desktop loading', () => {
       expect(statement.bindings).toEqual([2])
     }
     expect(db.batch.mock.calls[0][0][3].sql).toContain('s.desktop_id = ?')
+  })
+
+  it('lists pinned groups first and reports the flag as a boolean', async () => {
+    const db = database()
+    const board = await loadBoard(db as unknown as D1Database)
+    expect(board.desktops.map((d) => d.groups[0].pinned)).toEqual([false, true])
+    for (const sql of [db.prepare.mock.calls[1][0], (await loadBoardPage(db as unknown as D1Database, 2), db.batch.mock.calls[1][0][1].sql)]) {
+      expect(sql).toContain('ORDER BY pinned DESC, position, id')
+    }
   })
 
   it.each([null, 999])('falls back to the first desktop for %s', async (id) => {

@@ -24,6 +24,7 @@ export const onRequestGet: Fn = async ({ request, env }) => {
       view: desktop.view,
       groups: desktop.groups.map((group) => ({
         name: group.name,
+        pinned: group.pinned || undefined,
         sites: group.sites.map((site) => {
           const icon = icons.get(site.id)
           return {
