@@ -18,7 +18,8 @@ export const onRequest: Fn = async ({ request, env, next }) => {
   if (request.method !== 'GET' && request.method !== 'HEAD' && !sameOrigin(request)) {
     return fail(403, '跨站请求被拒绝')
   }
-  if (new URL(request.url).pathname === '/api/login') return next()
+  const path = new URL(request.url).pathname
+  if (path === '/api/login' || (path === '/api/settings' && request.method === 'GET')) return next()
   if (!(await hasValidSession(request, env.SESSION_SECRET))) return fail(401, '未登录')
   return next()
 }

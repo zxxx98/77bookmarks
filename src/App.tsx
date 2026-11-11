@@ -2,21 +2,29 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowUpRight, BookmarkPlus, LoaderCircle, SearchX } from 'lucide-react'
 import { motion } from 'motion/react'
 import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from 'react'
+import { DEFAULT_SETTINGS, type SystemSettings } from '../shared/settings'
 import type { Board, View } from '../shared/types'
 import { parseBookmarkUrl } from '../shared/url'
 import { api, ApiError } from './api'
 import { AddBookmarkDialog } from './components/AddBookmarkDialog'
-import { BackupDialog } from './components/BackupDialog'
 import { BoardView } from './components/BoardView'
 import { EditSiteDialog } from './components/EditSiteDialog'
 import { LoginPage } from './components/LoginPage'
+import { SettingsDialog } from './components/SettingsDialog'
 import { TopBar } from './components/TopBar'
 import { SEARCH_ENGINES, SearchEngineIcon, useSearchEngine } from './engines'
 import { searchBoard } from './search'
-import { useUi } from './ui'
+import { UiProvider, useUi } from './ui'
 
 const DESKTOP_KEY = 'desktop'
 const SWIPE_DISTANCE = 70
+const LOCK_KEY = 'bookmarks-lock'
+type LockMode = 'locked' | 'signed-out'
+
+function storedLockMode(): LockMode | null {
+  const value = localStorage.getItem(LOCK_KEY)
+  return value === 'locked' || value === 'signed-out' ? value : null
+}
 
 function canUseGlobalShortcut(event: KeyboardEvent | ClipboardEvent) {
   if (event.defaultPrevented || document.querySelector('[aria-modal="true"], .popover-panel:not([data-edit-controls])')) return false
@@ -24,17 +32,76 @@ function canUseGlobalShortcut(event: KeyboardEvent | ClipboardEvent) {
 }
 
 export default function App() {
-  const board = useQuery({ queryKey: ['board'], queryFn: api.board, retry: false })
+  const [lockMode, setLockMode] = useState(storedLockMode)
+  const logoutFlight = useRef<Promise<unknown>>(Promise.resolve())
+  const board = useQuery({ queryKey: ['board'], queryFn: api.board, retry: false, enabled: !lockMode })
+  const settings = useQuery({ queryKey: ['settings'], queryFn: api.settings })
+  const systemSettings = settings.data ?? DEFAULT_SETTINGS
+  const { siteName } = systemSettings
 
-  if (board.data) return <Home board={board.data} />
-  if (board.isPending) {
+  useEffect(() => {
+    document.title = siteName
+  }, [siteName])
+
+  const endSession = useCallback((mode: LockMode) => {
+    // Hide the board immediately, and persist the lock before contacting the server.
+    localStorage.setItem(LOCK_KEY, mode)
+    setLockMode(mode)
+    // Login waits for logout, so a slow logout cannot erase the newly issued cookie.
+    logoutFlight.current = api.logout().catch(() => undefined)
+  }, [])
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (!event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || event.key.toLowerCase() !== 'l' || event.isComposing) return
+      if (!board.data && !lockMode) return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      if (!lockMode && !event.repeat) endSession('locked')
+    }
+    // Capture also works while an input, menu, dialog, or drag is active.
+    window.addEventListener('keydown', onKey, true)
+    return () => window.removeEventListener('keydown', onKey, true)
+  }, [board.data, lockMode, endSession])
+
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== LOCK_KEY && event.key !== null) return
+      const mode = storedLockMode()
+      if (mode) setLockMode(mode)
+      else {
+        // Another tab has verified the password; refresh before showing its session.
+        void board.refetch().then((result) => {
+          if (!result.error && !storedLockMode()) setLockMode(null)
+        })
+      }
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [board.refetch])
+
+  const loggedIn = async () => {
+    const result = await board.refetch()
+    if (result.error) throw result.error
+    localStorage.removeItem(LOCK_KEY)
+    setLockMode(null)
+  }
+
+  if (lockMode || (board.error instanceof ApiError && board.error.status === 401)) {
+    return <LoginPage siteName={siteName} locked={lockMode === 'locked'} beforeLogin={() => logoutFlight.current} onSuccess={loggedIn} />
+  }
+  if (board.data && !settings.isPending) return (
+    <UiProvider>
+      <Home board={board.data} settings={systemSettings} onLock={() => endSession('locked')} onLogout={() => endSession('signed-out')} />
+    </UiProvider>
+  )
+  if (board.isPending || settings.isPending) {
     return (
       <main className="grid min-h-dvh place-items-center">
         <LoaderCircle className="animate-spin text-faint" />
       </main>
     )
   }
-  if (board.error instanceof ApiError && board.error.status === 401) return <LoginPage onSuccess={() => board.refetch()} />
   return (
     <main className="grid min-h-dvh place-items-center p-6 text-center">
       <div>
@@ -47,7 +114,8 @@ export default function App() {
   )
 }
 
-function Home({ board }: { board: Board }) {
+function Home({ board, settings, onLock, onLogout }: { board: Board; settings: SystemSettings; onLock: () => void; onLogout: () => void }) {
+  const { siteName, openInNewTab } = settings
   const queryClient = useQueryClient()
   const { toast } = useUi()
   const [engine] = useSearchEngine()
@@ -55,7 +123,7 @@ function Home({ board }: { board: Board }) {
   const [editing, setEditing] = useState(false)
   // null closes the dialog; an empty string opens it without a pasted URL
   const [addingUrl, setAddingUrl] = useState<string | null>(null)
-  const [backupOpen, setBackupOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const [editingSiteId, setEditingSiteId] = useState<number | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
@@ -179,14 +247,28 @@ function Home({ board }: { board: Board }) {
 
   const handleSearchEngine = useCallback(() => {
     const trimmed = query.trim()
-    if (trimmed) {
-      window.open(engine.buildUrl(trimmed), '_blank', 'noreferrer')
+    if (!trimmed) return
+    const url = engine.buildUrl(trimmed)
+    if (openInNewTab) {
+      window.open(url, '_blank', 'noreferrer')
+    } else {
+      window.location.assign(url)
     }
-  }, [engine, query])
+  }, [engine, query, openInNewTab])
+
+  const handleSearchBookmark = useCallback(() => {
+    if (!result.firstUrl) return
+    if (openInNewTab) {
+      window.open(result.firstUrl, '_blank', 'noreferrer')
+    } else {
+      window.location.assign(result.firstUrl)
+    }
+  }, [result.firstUrl, openInNewTab])
 
   return (
     <>
       <TopBar
+        siteName={siteName}
         desktops={desktops}
         desktop={desktop}
         onSwitchDesktop={switchDesktop}
@@ -195,12 +277,14 @@ function Home({ board }: { board: Board }) {
         query={query}
         onQuery={setQuery}
         onSearchEnter={handleSearchEngine}
-        onSearchBookmark={() => result.firstUrl && window.open(result.firstUrl, '_blank', 'noreferrer')}
+        onSearchBookmark={handleSearchBookmark}
         searchRef={searchRef}
         editing={editing}
         onToggleEditing={() => setEditing(!editing)}
         onAdd={() => setAddingUrl('')}
-        onBackup={() => setBackupOpen(true)}
+        onSettings={() => setSettingsOpen(true)}
+        onLock={onLock}
+        onLogout={onLogout}
       />
       <main className="mx-auto max-w-7xl overflow-x-clip px-4 pt-8 pb-24 sm:px-6" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
         <motion.div
@@ -243,8 +327,8 @@ function Home({ board }: { board: Board }) {
                   <a
                     key={e.id}
                     href={e.buildUrl(query.trim())}
-                    target="_blank"
-                    rel="noreferrer"
+                    target={openInNewTab ? '_blank' : undefined}
+                    rel={openInNewTab ? 'noreferrer' : undefined}
                     className="flex items-center gap-1.5 rounded-pill border border-line bg-surface px-2.5 py-1 text-muted transition hover:border-accent/50 hover:text-fg"
                   >
                     <SearchEngineIcon id={e.id} size={12} />
@@ -255,6 +339,7 @@ function Home({ board }: { board: Board }) {
             </div>
           ) : (
             <BoardView
+              openInNewTab={openInNewTab}
               desktop={desktop}
               groups={result.groups}
               editing={editing}
@@ -284,7 +369,7 @@ function Home({ board }: { board: Board }) {
       </main>
       <AddBookmarkDialog open={addingUrl !== null} initialUrl={addingUrl ?? ''} onClose={() => setAddingUrl(null)} desktop={desktop} />
       <EditSiteDialog site={editingSite} desktop={desktop} desktops={desktops} onClose={() => setEditingSiteId(null)} />
-      <BackupDialog open={backupOpen} onClose={() => setBackupOpen(false)} desktops={desktops} desktop={desktop} onImported={switchDesktop} />
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} settings={settings} desktops={desktops} desktop={desktop} onImported={switchDesktop} />
     </>
   )
 }

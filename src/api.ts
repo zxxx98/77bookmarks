@@ -1,4 +1,5 @@
 import type { AddResult, Board, ImportMode, ImportResult, OrderInput, View } from '../shared/types'
+import type { SystemSettings } from '../shared/settings'
 
 export class ApiError extends Error {
   constructor(
@@ -30,6 +31,8 @@ export const api = {
   login: (password: string) => request('/login', 'POST', { password }),
   logout: () => request('/logout', 'POST'),
   board: () => request<Board>('/board'),
+  settings: () => request<SystemSettings>('/settings'),
+  updateSettings: (settings: SystemSettings) => request<SystemSettings>('/settings', 'PUT', settings),
   addBookmark: (url: string, desktopId: number, groupId?: number) => request<AddResult>('/bookmarks', 'POST', { url, desktopId, groupId }),
   order: (order: OrderInput) => request('/order', 'PUT', order),
 

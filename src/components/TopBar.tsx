@@ -1,8 +1,6 @@
-import { Check, ChevronDown, CornerDownLeft, DatabaseBackup, Ellipsis, LogOut, Monitor, Moon, Palette, Pencil, Plus, Sun, X } from 'lucide-react'
+import { Check, ChevronDown, CornerDownLeft, Ellipsis, LockKeyhole, LogOut, Monitor, Moon, Palette, Pencil, Plus, Settings, Sun, X } from 'lucide-react'
 import type { RefObject } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
 import type { Desktop, View } from '../../shared/types'
-import { api } from '../api'
 import { SEARCH_ENGINES, SearchEngineIcon, useSearchEngine, type SearchEngineId } from '../engines'
 import { STYLE_PRESETS, useStyle, useTheme, type StyleId, type StylePreset, type Theme } from '../theme'
 import { usePopover } from '../ui'
@@ -38,6 +36,7 @@ export function Logo({ size = 32 }: { size?: number }) {
 }
 
 interface Props {
+  siteName: string
   desktops: Desktop[]
   desktop: Desktop
   onSwitchDesktop: (desktopId: number) => void
@@ -51,10 +50,13 @@ interface Props {
   editing: boolean
   onToggleEditing: () => void
   onAdd: () => void
-  onBackup: () => void
+  onSettings: () => void
+  onLock: () => void
+  onLogout: () => void
 }
 
 export function TopBar({
+  siteName,
   desktops,
   desktop,
   onSwitchDesktop,
@@ -68,7 +70,9 @@ export function TopBar({
   editing,
   onToggleEditing,
   onAdd,
-  onBackup,
+  onSettings,
+  onLock,
+  onLogout,
 }: Props) {
   const [theme, setTheme] = useTheme()
   const [styleId, setStyleId, activePreset] = useStyle()
@@ -80,7 +84,7 @@ export function TopBar({
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-2 px-4 sm:gap-3 sm:px-6">
         <div className="flex items-center gap-2.5 max-sm:hidden">
           <Logo />
-          <span className="hidden font-display text-[15px] font-semibold tracking-tight xl:block">77 Bookmarks</span>
+          <span className="hidden max-w-48 truncate font-display text-[15px] font-semibold tracking-tight xl:block" title={siteName}>{siteName}</span>
         </div>
         <DesktopSwitcher desktops={desktops} active={desktop} onSwitch={onSwitchDesktop} onStep={onStepDesktop} />
 
@@ -152,7 +156,7 @@ export function TopBar({
         >
           {editing ? <Check size={17} /> : <Pencil size={16} />}
         </button>
-        <MoreMenu view={desktop.view} onView={onView} theme={theme} onTheme={setTheme} styleId={styleId} onStyle={setStyleId} onBackup={onBackup} />
+        <MoreMenu view={desktop.view} onView={onView} theme={theme} onTheme={setTheme} styleId={styleId} onStyle={setStyleId} onSettings={onSettings} onLock={onLock} onLogout={onLogout} />
         <button className="btn btn-primary max-sm:w-9 max-sm:px-0" onClick={onAdd} aria-label="添加书签">
           <Plus size={16} strokeWidth={2.5} />
           <span className="max-sm:hidden">添加</span>
@@ -317,18 +321,13 @@ interface MenuProps {
   onTheme: (theme: Theme) => void
   styleId: StyleId
   onStyle: (style: StyleId) => void
-  onBackup: () => void
+  onSettings: () => void
+  onLock: () => void
+  onLogout: () => void
 }
 
-function MoreMenu({ view, onView, theme, onTheme, styleId, onStyle, onBackup }: MenuProps) {
-  const queryClient = useQueryClient()
+function MoreMenu({ view, onView, theme, onTheme, styleId, onStyle, onSettings, onLock, onLogout }: MenuProps) {
   const menu = usePopover<HTMLDivElement>()
-
-  const logout = async () => {
-    await api.logout().catch(() => null)
-    queryClient.removeQueries({ queryKey: ['board'] })
-    await queryClient.refetchQueries({ queryKey: ['board'] })
-  }
 
   const item = 'flex w-full items-center gap-2.5 rounded-control px-2.5 py-2 text-left text-sm hover:bg-fg/6'
   const close = () => menu.setOpen(false)
@@ -376,14 +375,19 @@ function MoreMenu({ view, onView, theme, onTheme, styleId, onStyle, onBackup }: 
             className={item}
             onClick={() => {
               close()
-              onBackup()
+              onSettings()
             }}
           >
-            <DatabaseBackup size={15} className="text-muted" />
-            备份与恢复
+            <Settings size={15} className="text-muted" />
+            系统设置
           </button>
           <div className="my-1 h-px bg-line" />
-          <button className={item} onClick={logout}>
+          <button className={item} onClick={onLock}>
+            <LockKeyhole size={15} className="text-muted" />
+            锁定
+            <kbd className="ml-auto font-mono text-xs text-faint">Ctrl+L</kbd>
+          </button>
+          <button className={item} onClick={onLogout}>
             <LogOut size={15} className="text-muted" />
             退出登录
           </button>
