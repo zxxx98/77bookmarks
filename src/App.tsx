@@ -177,7 +177,7 @@ interface HomeProps {
 }
 
 function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBoard, settingsReady, settingsError, onRetrySettings, settings, onLock, onLogout }: HomeProps) {
-  const { siteName, openInNewTab } = settings
+  const { siteName, openInNewTab, layoutColumns } = settings
   const queryClient = useQueryClient()
   const { toast } = useUi()
   const [engine] = useSearchEngine()
@@ -415,6 +415,7 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
           ) : (
             <BoardView
               openInNewTab={openInNewTab}
+              layoutColumns={layoutColumns}
               desktop={desktop}
               groups={result.groups}
               editing={editing}

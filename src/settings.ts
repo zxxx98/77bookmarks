@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, MAX_SITE_NAME_LENGTH, type SystemSettings } from '../shared/settings'
+import { DEFAULT_SETTINGS, isLayoutColumns, MAX_SITE_NAME_LENGTH, type SystemSettings } from '../shared/settings'
 
 const SETTINGS_KEY = 'bookmarks-settings'
 
@@ -7,7 +7,7 @@ export function readSettings(): SystemSettings {
   try {
     const value = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? 'null')
     if (typeof value?.siteName === 'string' && value.siteName.trim() && value.siteName.length <= MAX_SITE_NAME_LENGTH && typeof value.openInNewTab === 'boolean') {
-      return { siteName: value.siteName, openInNewTab: value.openInNewTab }
+      return { siteName: value.siteName, openInNewTab: value.openInNewTab, layoutColumns: isLayoutColumns(value.layoutColumns) ? value.layoutColumns : 1 }
     }
   } catch { /* Storage may be unavailable. */ }
   return DEFAULT_SETTINGS

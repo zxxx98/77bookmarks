@@ -18,6 +18,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Check, GripVertical, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import type { Desktop, Group, Site, View } from '../../shared/types'
+import type { LayoutColumns } from '../../shared/settings'
 import { api } from '../api'
 import { updateBoardCache } from '../board-cache'
 import { useAct, useUi } from '../ui'
@@ -101,8 +102,16 @@ const GRID: Record<View, string> = {
   list: 'flex flex-col gap-1.5',
 }
 
+const GROUP_LAYOUT: Record<LayoutColumns, string> = {
+  1: 'flex flex-col gap-9',
+  2: 'grid grid-cols-1 gap-x-6 gap-y-9 md:grid-cols-2',
+  3: 'grid grid-cols-1 gap-x-6 gap-y-9 md:grid-cols-2 lg:grid-cols-3',
+  4: 'grid grid-cols-1 gap-x-6 gap-y-9 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4',
+}
+
 interface Props {
   openInNewTab: boolean
+  layoutColumns: LayoutColumns
   desktop: Desktop
   /** The desktop's groups, narrowed down while searching */
   groups: Group[]
@@ -114,7 +123,7 @@ interface Props {
   onStartEditing?: () => void
 }
 
-export function BoardView({ desktop, groups, editing, sortable, matchedLinks, onEditSite, onStartEditing, openInNewTab }: Props) {
+export function BoardView({ desktop, groups, editing, sortable, matchedLinks, onEditSite, onStartEditing, openInNewTab, layoutColumns }: Props) {
   const queryClient = useQueryClient()
   const act = useAct()
   const { toast, confirm } = useUi()
@@ -274,8 +283,8 @@ export function BoardView({ desktop, groups, editing, sortable, matchedLinks, on
         setActiveSite(null)
       }}
     >
-      <SortableContext items={view.map((g) => `g-${g.id}`)} strategy={verticalListSortingStrategy}>
-        <div className="flex flex-col gap-9">
+      <SortableContext items={view.map((g) => `g-${g.id}`)} strategy={layoutColumns === 1 ? verticalListSortingStrategy : rectSortingStrategy}>
+        <div className={GROUP_LAYOUT[layoutColumns]}>
           {view.map((group) => (
             <GroupSection
               openInNewTab={openInNewTab}
@@ -346,7 +355,7 @@ function GroupSection({
   onDeleteSite,
   onContextMenu,
   dragJustEndedRef,
-}: Omit<Props, 'groups' | 'desktop'> & {
+}: Omit<Props, 'groups' | 'desktop' | 'layoutColumns'> & {
   group: Group
   view: View
   onDeleteSite: (site: Site) => void
@@ -382,7 +391,7 @@ function GroupSection({
     <section
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={isDragging ? 'relative z-10 opacity-70' : undefined}
+      className={isDragging ? 'relative z-10 min-w-0 opacity-70' : 'min-w-0'}
     >
       <header className="mb-3 flex h-8 items-center gap-2 px-1">
         {renaming ? (

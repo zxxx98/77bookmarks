@@ -1,12 +1,14 @@
 import { fail, json, readJson, type Fn } from '../../server/http'
-import { DEFAULT_SITE_NAME, MAX_SITE_NAME_LENGTH, type SystemSettings } from '../../shared/settings'
+import { DEFAULT_SITE_NAME, isLayoutColumns, MAX_SITE_NAME_LENGTH, type SystemSettings } from '../../shared/settings'
 
 async function loadSettings(db: D1Database): Promise<SystemSettings> {
-  const rows = await db.prepare("SELECT key, value FROM settings WHERE key IN ('site_name', 'open_in_new_tab')").all<{ key: string; value: string }>()
+  const rows = await db.prepare("SELECT key, value FROM settings WHERE key IN ('site_name', 'open_in_new_tab', 'layout_columns')").all<{ key: string; value: string }>()
   const values = new Map(rows.results.map((row) => [row.key, row.value]))
+  const layoutColumns = Number(values.get('layout_columns'))
   return {
     siteName: values.get('site_name') ?? DEFAULT_SITE_NAME,
     openInNewTab: values.get('open_in_new_tab') !== 'false',
+    layoutColumns: isLayoutColumns(layoutColumns) ? layoutColumns : 1,
   }
 }
 
@@ -24,11 +26,15 @@ export const onRequestPut: Fn = async ({ request, env }) => {
   if (body?.openInNewTab !== undefined && typeof body.openInNewTab !== 'boolean') {
     return fail(400, '打开方式必须为布尔值')
   }
+  if (body?.layoutColumns !== undefined && !isLayoutColumns(body.layoutColumns)) {
+    return fail(400, '布局列数必须为 1–4 列')
+  }
   const save = (key: string, value: string) => env.DB
     .prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
     .bind(key, value)
   const statements = [save('site_name', siteName)]
   if (typeof body?.openInNewTab === 'boolean') statements.push(save('open_in_new_tab', String(body.openInNewTab)))
+  if (isLayoutColumns(body?.layoutColumns)) statements.push(save('layout_columns', String(body.layoutColumns)))
   await env.DB.batch(statements)
   return json(await loadSettings(env.DB))
 }

@@ -79,13 +79,13 @@ describe('settings persistence', () => {
   it('uses the original name before a name has been configured', async () => {
     const db = settingsDb()
     const response = await onRequestGet(context(request(), db))
-    expect(await response.json()).toEqual({ siteName: DEFAULT_SITE_NAME, openInNewTab: true })
+    expect(await response.json()).toEqual({ siteName: DEFAULT_SITE_NAME, openInNewTab: true, layoutColumns: 1 })
     expect(response.headers.get('Cache-Control')).toBe('no-store')
   })
 
   it('returns the saved site name', async () => {
     const db = settingsDb({ site_name: '我的书签' })
-    expect(await (await onRequestGet(context(request(), db))).json()).toEqual({ siteName: '我的书签', openInNewTab: true })
+    expect(await (await onRequestGet(context(request(), db))).json()).toEqual({ siteName: '我的书签', openInNewTab: true, layoutColumns: 1 })
   })
 
   it.each([undefined, null, 123, '', '   ', 'a'.repeat(61)])('rejects an invalid name: %s', async (siteName) => {
@@ -97,21 +97,41 @@ describe('settings persistence', () => {
   it('trims the name and saves it as a bound parameter', async () => {
     const db = settingsDb()
     const response = await onRequestPut(context(request('PUT', { siteName: '  我的书签  ' }), db))
-    expect(await response.json()).toEqual({ siteName: '我的书签', openInNewTab: true })
+    expect(await response.json()).toEqual({ siteName: '我的书签', openInNewTab: true, layoutColumns: 1 })
     expect(db.bind).toHaveBeenCalledWith('site_name', '我的书签')
   })
 
   it.each([true, false])('persists and returns openInNewTab = %s', async (openInNewTab) => {
     const db = settingsDb()
     const response = await onRequestPut(context(request('PUT', { siteName: '我的书签', openInNewTab }), db))
-    expect(await response.json()).toEqual({ siteName: '我的书签', openInNewTab })
-    expect(await (await onRequestGet(context(request(), db))).json()).toEqual({ siteName: '我的书签', openInNewTab })
+    expect(await response.json()).toEqual({ siteName: '我的书签', openInNewTab, layoutColumns: 1 })
+    expect(await (await onRequestGet(context(request(), db))).json()).toEqual({ siteName: '我的书签', openInNewTab, layoutColumns: 1 })
   })
 
   it('preserves the opening preference when an older client only changes the name', async () => {
     const db = settingsDb({ open_in_new_tab: 'false' })
     const response = await onRequestPut(context(request('PUT', { siteName: '新名称' }), db))
-    expect(await response.json()).toEqual({ siteName: '新名称', openInNewTab: false })
+    expect(await response.json()).toEqual({ siteName: '新名称', openInNewTab: false, layoutColumns: 1 })
+  })
+
+  it.each([1, 2, 3, 4])('persists and returns layoutColumns = %s', async (layoutColumns) => {
+    const db = settingsDb()
+    const response = await onRequestPut(context(request('PUT', { siteName: '我的书签', layoutColumns }), db))
+    expect(await response.json()).toEqual({ siteName: '我的书签', openInNewTab: true, layoutColumns })
+    expect(await (await onRequestGet(context(request(), db))).json()).toEqual({ siteName: '我的书签', openInNewTab: true, layoutColumns })
+  })
+
+  it.each([null, 0, 5, 2.5, '2'])('rejects an invalid layout column count: %s', async (layoutColumns) => {
+    const db = settingsDb()
+    const response = await onRequestPut(context(request('PUT', { siteName: '新名称', layoutColumns }), db))
+    expect(response.status).toBe(400)
+    expect(db.batch).not.toHaveBeenCalled()
+  })
+
+  it('preserves the layout when an older client saves other settings', async () => {
+    const db = settingsDb({ layout_columns: '3' })
+    const response = await onRequestPut(context(request('PUT', { siteName: '新名称' }), db))
+    expect(await response.json()).toEqual({ siteName: '新名称', openInNewTab: true, layoutColumns: 3 })
   })
 
   it.each([null, 0, 1, 'false', 'true'])('rejects a non-boolean opening preference: %s', async (openInNewTab) => {
