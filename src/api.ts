@@ -1,4 +1,4 @@
-import type { AddResult, BoardPage, DesktopMatch, ImportMode, ImportResult, OrderInput, UsageStats, View } from '../shared/types'
+import type { AccessTokenStatus, AddResult, BoardPage, DesktopMatch, ImportMode, ImportResult, OrderInput, UsageStats, View } from '../shared/types'
 import type { SystemSettings } from '../shared/settings'
 import { rememberSettings } from './settings'
 import type { ChromeImportRow } from './chrome-import'
@@ -40,6 +40,11 @@ export const api = {
   updateSettings: (settings: SystemSettings) => request<SystemSettings>('/settings', 'PUT', settings).then(rememberSettings),
   addBookmark: (url: string, desktopId: number, groupId?: number) => request<AddResult>('/bookmarks', 'POST', { url, desktopId, groupId }),
   order: (order: OrderInput) => request('/order', 'PUT', order),
+
+  /** State of the access token used by the browser extension */
+  tokenStatus: () => request<AccessTokenStatus | null>('/token'),
+  createToken: () => request<{ token: string; createdAt: number }>('/token', 'POST'),
+  revokeToken: () => request('/token', 'DELETE'),
 
   createDesktop: (name: string) => request<{ id: number; name: string }>('/desktops', 'POST', { name }),
   updateDesktop: (id: number, patch: { name?: string; view?: View }) => request(`/desktops/${id}`, 'PATCH', patch),

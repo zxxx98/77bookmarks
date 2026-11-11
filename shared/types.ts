@@ -106,3 +106,9 @@ export interface UsageStats {
   since: number | null
   sites: SiteUsage[]
 }
+
+/** Where an access token stands: the token itself is only ever shown once, when it is created */
+export interface AccessTokenStatus {
+  createdAt: number
+  lastUsedAt: number | null
+}

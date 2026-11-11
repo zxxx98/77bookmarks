@@ -54,6 +54,15 @@ export function siteTitleFrom(meta: PageMeta): string | null {
   return parts.find((part) => !GENERIC_TITLE.test(part)) ?? meta.title
 }
 
+/**
+ * A page describing itself: the browser extension reports the tab title and address of the page it
+ * is looking at, which is the only description available for pages this server can't fetch - ones
+ * behind a login, or on a private network.
+ */
+export function reportedMeta(title: string, url: string): PageMeta {
+  return { title, siteName: null, icons: [], finalUrl: url }
+}
+
 /** Link title: the page title without the site's own name, or null if the page redirected elsewhere (e.g. to a login page) */
 export function linkTitleFrom(meta: PageMeta, requestedUrl: string, siteTitle: string): string | null {
   if (!meta.title || !meta.finalUrl) return null

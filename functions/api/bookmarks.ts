@@ -1,6 +1,6 @@
 import { firstGroupId, nextPosition, resolveDesktopId, saveIcon } from '../../server/db'
-import { fail, json, readJson, type Fn } from '../../server/http'
-import { fetchPageMeta, fetchSiteIcon, linkTitleFrom, siteTitleFrom } from '../../server/meta'
+import { fail, json, readJson, text, type Fn } from '../../server/http'
+import { fetchPageMeta, fetchSiteIcon, linkTitleFrom, reportedMeta, siteTitleFrom } from '../../server/meta'
 import type { AddResult } from '../../shared/types'
 import { fallbackLinkTitle, fullUrl, hostOf, parseBookmarkUrl } from '../../shared/url'
 
@@ -13,9 +13,15 @@ async function resolveGroupId(db: D1Database, desktopId: number, requested: unkn
   return firstGroupId(db, desktopId)
 }
 
+/**
+ * Body: `url`, plus optionally `desktopId`, `groupId` and `title`. The title is what the browser
+ * extension sees in the tab; it stands in when the server can't read the page itself, as with
+ * pages behind a login or on a private network.
+ */
 export const onRequestPost: Fn = async ({ request, env }) => {
   const db = env.DB
   const body = await readJson(request)
+  const reportedTitle = text(body?.title, 80)
   const parsed = parseBookmarkUrl(typeof body?.url === 'string' ? body.url : '')
   if (!parsed) return fail(400, '无效的网址')
   const { origin, path } = parsed
@@ -42,7 +48,8 @@ export const onRequestPost: Fn = async ({ request, env }) => {
 
   if (!site) {
     const groupId = await resolveGroupId(db, desktopId, body?.groupId)
-    const title = (homeMeta && siteTitleFrom(homeMeta)) ?? hostOf(origin)
+    // The tab title only describes the site when the bookmarked page is its homepage
+    const title = (homeMeta && siteTitleFrom(homeMeta)) ?? (reportedTitle && !path ? siteTitleFrom(reportedMeta(reportedTitle, origin)) : null) ?? hostOf(origin)
     const created = await db
       .prepare('INSERT INTO sites (desktop_id, group_id, origin, title, position, created_at) VALUES (?, ?, ?, ?, ?, ?)')
       .bind(desktopId, groupId, origin, title, await nextPosition(db, 'sites', groupId), Date.now())
@@ -54,7 +61,11 @@ export const onRequestPost: Fn = async ({ request, env }) => {
   }
 
   if (path) {
-    const linkTitle = (pageMeta && linkTitleFrom(pageMeta, fullUrl(origin, path), site.title)) ?? fallbackLinkTitle(path)
+    const url = fullUrl(origin, path)
+    const linkTitle =
+      (pageMeta && linkTitleFrom(pageMeta, url, site.title)) ??
+      (reportedTitle ? linkTitleFrom(reportedMeta(reportedTitle, url), url, site.title) : null) ??
+      fallbackLinkTitle(path)
     await db
       .prepare('INSERT INTO links (site_id, path, title, position, created_at) VALUES (?, ?, ?, ?, ?)')
       .bind(site.id, path, linkTitle, await nextPosition(db, 'links', site.id), Date.now())

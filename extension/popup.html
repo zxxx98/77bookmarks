@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>77 Bookmarks</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body class="popup">
+    <header class="brand">
+      <img src="icons/icon-48.png" alt="" />
+      <h1 id="site-name">77 Bookmarks</h1>
+      <button id="open" class="link" hidden>打开书签页</button>
+    </header>
+
+    <div id="setup" hidden>
+      <p class="muted" style="margin: 12px 0">还没有连接书签页。在书签页的「更多 → 系统设置 → 浏览器扩展」生成连接码，然后粘贴到扩展选项里。</p>
+      <button id="go-options" class="primary">打开扩展选项</button>
+    </div>
+
+    <form id="form" hidden>
+      <div class="page">
+        <p class="title" id="page-title"></p>
+        <p class="muted" id="page-url"></p>
+      </div>
+      <div class="fields">
+        <div>
+          <label for="desktop">桌面</label>
+          <select id="desktop"></select>
+        </div>
+        <div>
+          <label for="group">分组</label>
+          <select id="group"></select>
+        </div>
+      </div>
+      <p class="muted" style="margin-top: 8px">右键菜单和快捷键也会添加到这里。</p>
+      <button id="add" class="primary">添加到书签页</button>
+      <p id="status" class="status" role="status"></p>
+    </form>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>
