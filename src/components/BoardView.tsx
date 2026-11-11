@@ -282,7 +282,7 @@ export function BoardView({ desktop, groups, editing, sortable, matchedLinks, on
           className="popover-panel fixed z-50 min-w-32 animate-rise p-1 [animation-duration:0.12s]"
         >
           <button
-            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm transition hover:bg-fg/6"
+            className="flex w-full items-center gap-2 rounded-control px-2.5 py-1.5 text-left text-sm transition hover:bg-fg/6"
             onClick={() => {
               const id = contextMenu.site.id
               setContextMenu(null)
@@ -293,7 +293,7 @@ export function BoardView({ desktop, groups, editing, sortable, matchedLinks, on
             <span>编辑</span>
           </button>
           <button
-            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm text-danger transition hover:bg-danger/10"
+            className="flex w-full items-center gap-2 rounded-control px-2.5 py-1.5 text-left text-sm text-danger transition hover:bg-danger/10"
             onClick={() => {
               const site = contextMenu.site
               setContextMenu(null)
