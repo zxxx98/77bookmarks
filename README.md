@@ -2,6 +2,8 @@
 
 单用户的卡片式书签页。添加网址时自动拆分：域名成为一张卡片，子路径成为卡片上的链接。运行在 Cloudflare Pages + D1 上。
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/zxxx98/77bookmarks)
+
 ## 本地开发
 
 ```bash
@@ -15,6 +17,20 @@ npm run dev                      # 可选：带热更新的前端，/api 代理�
 `npm test` 运行 URL 解析的单元测试，`npm run typecheck` 做类型检查。
 
 ## 部署
+
+### 一键部署
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/zxxx98/77bookmarks)
+
+点击上方按钮即可将项目一键部署到 Cloudflare。
+
+部署完成后，请在 Cloudflare 控制台中完成以下配置：
+1. **D1 数据库**：创建并绑定一个 D1 数据库（变量名为 `DB`），并执行数据库迁移（或导入 `migrations/` 目录下的 SQL 文件）。
+2. **环境变量 / Secrets**：
+   - `ADMIN_PASSWORD`：管理员密码
+   - `SESSION_SECRET`：会话签名密钥（例如通过 `openssl rand -hex 32` 生成）
+
+### 命令行部署
 
 ```bash
 npx wrangler d1 create 77bookmarks        # 把输出的 database_id 填入 wrangler.toml
