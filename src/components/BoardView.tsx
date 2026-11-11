@@ -101,6 +101,7 @@ const GRID: Record<View, string> = {
 }
 
 interface Props {
+  openInNewTab: boolean
   desktop: Desktop
   /** The desktop's groups, narrowed down while searching */
   groups: Group[]
@@ -112,7 +113,7 @@ interface Props {
   onStartEditing?: () => void
 }
 
-export function BoardView({ desktop, groups, editing, sortable, matchedLinks, onEditSite, onStartEditing }: Props) {
+export function BoardView({ desktop, groups, editing, sortable, matchedLinks, onEditSite, onStartEditing, openInNewTab }: Props) {
   const queryClient = useQueryClient()
   const act = useAct()
   const { toast, confirm } = useUi()
@@ -276,6 +277,7 @@ export function BoardView({ desktop, groups, editing, sortable, matchedLinks, on
         <div className="flex flex-col gap-9">
           {view.map((group) => (
             <GroupSection
+              openInNewTab={openInNewTab}
               key={group.id}
               group={group}
               view={desktop.view}
@@ -292,7 +294,7 @@ export function BoardView({ desktop, groups, editing, sortable, matchedLinks, on
       </SortableContext>
       {editing && <NewGroup desktopId={desktop.id} />}
       <DragOverlay dropAnimation={{ duration: 200, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' }}>
-        {activeSite && <SiteCard site={activeSite} view={desktop.view} editing lifted />}
+        {activeSite && <SiteCard site={activeSite} view={desktop.view} openInNewTab={openInNewTab} editing lifted />}
       </DragOverlay>
 
       {contextMenu && (
@@ -333,6 +335,7 @@ export function BoardView({ desktop, groups, editing, sortable, matchedLinks, on
 }
 
 function GroupSection({
+  openInNewTab,
   group,
   view,
   editing,
@@ -435,6 +438,7 @@ function GroupSection({
           <div className={`${GRID[view]} ${view === 'small' && editing ? 'gap-y-5 pt-1.5' : ''}`}>
             {group.sites.map((site, index) => (
               <SortableSite
+                openInNewTab={openInNewTab}
                 key={site.id}
                 site={site}
                 view={view}
@@ -456,6 +460,7 @@ function GroupSection({
 }
 
 interface SortableSiteProps {
+  openInNewTab: boolean
   site: Site
   view: View
   index: number
@@ -468,7 +473,7 @@ interface SortableSiteProps {
   dragJustEndedRef: React.RefObject<boolean>
 }
 
-function SortableSite({ site, view, index, editing, sortable, matchedLinks, onEdit, onDelete, onContextMenu, dragJustEndedRef }: SortableSiteProps) {
+function SortableSite({ site, view, index, editing, sortable, matchedLinks, onEdit, onDelete, onContextMenu, dragJustEndedRef, openInNewTab }: SortableSiteProps) {
   const act = useAct()
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id: `s-${site.id}`, disabled: !sortable })
 
@@ -490,6 +495,7 @@ function SortableSite({ site, view, index, editing, sortable, matchedLinks, onEd
       {/* The entrance animation lives on an inner element so it doesn't fight the drag transform */}
       <div className="h-full animate-rise" style={{ animationDelay: `${Math.min(index, 12) * 30}ms` }}>
         <SiteCard
+          openInNewTab={openInNewTab}
           site={site}
           view={view}
           editing={editing}

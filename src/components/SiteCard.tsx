@@ -8,6 +8,7 @@ import { SiteIcon } from './SiteIcon'
 const COLLAPSED_LINKS = 6
 
 interface Props {
+  openInNewTab: boolean
   site: Site
   view?: View
   editing?: boolean
@@ -29,7 +30,7 @@ export function SiteCard(props: Props) {
 
 const focusRing = 'outline-none focus-visible:ring-2 focus-visible:ring-accent/50'
 
-function LargeCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, onDelete, onDeleteLink }: Props) {
+function LargeCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, onDelete, onDeleteLink, openInNewTab }: Props) {
   const [expanded, setExpanded] = useState(false)
   const searching = !!matchedLinks && matchedLinks.size > 0
   const showAll = expanded || editing || searching || site.links.length <= COLLAPSED_LINKS
@@ -39,7 +40,7 @@ function LargeCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
     <div className={`group/card relative h-full select-none [-webkit-touch-callout:none] ${lifted ? 'card-lifted scale-[1.02]' : 'card-surface'}`}>
       <a
         href={site.origin}
-        target="_blank"
+        target={openInNewTab ? '_blank' : '_self'}
         rel="noreferrer"
         draggable={false}
         className={`flex items-center gap-3 rounded-card p-4 ${focusRing} ${editing ? 'pr-26' : ''} ${site.links.length ? 'pb-3' : ''}`}
@@ -54,7 +55,7 @@ function LargeCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
       {site.links.length > 0 && (
         <div className="flex flex-wrap gap-1.5 px-4 pb-4">
           {links.map((link) => (
-            <LinkChip key={link.id} site={site} link={link} matched={matchedLinks?.has(link.id)} editing={editing} onDelete={onDeleteLink} />
+            <LinkChip openInNewTab={openInNewTab} key={link.id} site={site} link={link} matched={matchedLinks?.has(link.id)} editing={editing} onDelete={onDeleteLink} />
           ))}
           {!showAll && (
             <button
@@ -73,7 +74,7 @@ function LargeCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
 }
 
 /** Icon and title only. Links open from the count badge, and the ones matching a search are shown inline */
-function SmallCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, onDelete, onDeleteLink }: Props) {
+function SmallCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, onDelete, onDeleteLink, openInNewTab }: Props) {
   const menu = usePopover<HTMLDivElement>()
   const matched = site.links.filter((link) => matchedLinks?.has(link.id))
 
@@ -82,7 +83,7 @@ function SmallCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
       <div className="flex items-center">
         <a
           href={site.origin}
-          target="_blank"
+          target={openInNewTab ? '_blank' : '_self'}
           rel="noreferrer"
           draggable={false}
           title={`${site.title}\n${hostOf(site.origin)}`}
@@ -110,7 +111,7 @@ function SmallCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
       {matched.length > 0 && !menu.open && (
         <div className="flex flex-wrap gap-1.5 px-2.5 pb-2.5">
           {matched.map((link) => (
-            <LinkChip key={link.id} site={site} link={link} matched editing={editing} onDelete={onDeleteLink} />
+            <LinkChip openInNewTab={openInNewTab} key={link.id} site={site} link={link} matched editing={editing} onDelete={onDeleteLink} />
           ))}
         </div>
       )}
@@ -122,7 +123,7 @@ function SmallCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
             <div key={link.id} className={`flex items-center rounded-control hover:bg-fg/6 ${matchedLinks?.has(link.id) ? 'text-accent' : ''}`}>
               <a
                 href={fullUrl(site.origin, link.path)}
-                target="_blank"
+                target={openInNewTab ? '_blank' : '_self'}
                 rel="noreferrer"
                 title={`${link.title}\n${link.path}`}
                 className={`min-w-0 flex-1 truncate rounded-control px-2.5 py-1.5 text-[13px] ${focusRing}`}
@@ -149,10 +150,10 @@ function SmallCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
   )
 }
 
-function ListRow({ site, editing, matchedLinks, handleProps, lifted, onEdit, onDelete, onDeleteLink }: Props) {
+function ListRow({ site, editing, matchedLinks, handleProps, lifted, onEdit, onDelete, onDeleteLink, openInNewTab }: Props) {
   return (
     <div className={`group/card relative flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2 select-none [-webkit-touch-callout:none] ${lifted ? 'card-lifted' : 'card-surface'}`}>
-      <a href={site.origin} target="_blank" rel="noreferrer" draggable={false} className={`flex min-w-0 items-center gap-2.5 rounded-control max-sm:flex-1 sm:w-72 sm:shrink-0 ${focusRing}`}>
+      <a href={site.origin} target={openInNewTab ? '_blank' : '_self'} rel="noreferrer" draggable={false} className={`flex min-w-0 items-center gap-2.5 rounded-control max-sm:flex-1 sm:w-72 sm:shrink-0 ${focusRing}`}>
         <SiteIcon site={site} size={26} />
         <span className="truncate text-sm font-semibold">{site.title}</span>
         <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-faint">{hostOf(site.origin)}</span>
@@ -160,7 +161,7 @@ function ListRow({ site, editing, matchedLinks, handleProps, lifted, onEdit, onD
       {site.links.length > 0 && (
         <div className="flex min-w-0 flex-wrap gap-1.5 max-sm:order-last max-sm:basis-full sm:flex-1">
           {site.links.map((link) => (
-            <LinkChip key={link.id} site={site} link={link} matched={matchedLinks?.has(link.id)} editing={editing} onDelete={onDeleteLink} />
+            <LinkChip openInNewTab={openInNewTab} key={link.id} site={site} link={link} matched={matchedLinks?.has(link.id)} editing={editing} onDelete={onDeleteLink} />
           ))}
         </div>
       )}
@@ -170,6 +171,7 @@ function ListRow({ site, editing, matchedLinks, handleProps, lifted, onEdit, onD
 }
 
 interface LinkChipProps {
+  openInNewTab: boolean
   site: Site
   link: Link
   matched?: boolean
@@ -177,7 +179,7 @@ interface LinkChipProps {
   onDelete?: (linkId: number) => void
 }
 
-function LinkChip({ site, link, matched, editing, onDelete }: LinkChipProps) {
+function LinkChip({ site, link, matched, editing, onDelete, openInNewTab }: LinkChipProps) {
   return (
     <span
       className={`inline-flex max-w-full items-center rounded-pill text-xs font-medium transition ${
@@ -187,7 +189,7 @@ function LinkChip({ site, link, matched, editing, onDelete }: LinkChipProps) {
     >
       <a
         href={fullUrl(site.origin, link.path)}
-        target="_blank"
+        target={openInNewTab ? '_blank' : '_self'}
         rel="noreferrer"
         draggable={false}
         title={`${link.title}\n${link.path}`}

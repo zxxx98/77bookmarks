@@ -3,23 +3,14 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { backupStats, parseBackup, type ParsedBackup } from '../../shared/backup'
 import type { Desktop, ImportMode } from '../../shared/types'
 import { api } from '../api'
-import { Dialog, useAct, useUi } from '../ui'
+import { useAct, useUi } from '../ui'
 
 interface Props {
-  open: boolean
   onClose: () => void
   desktops: Desktop[]
   desktop: Desktop
   /** Called with the first imported desktop once an import has finished */
   onImported: (desktopId: number) => void
-}
-
-export function BackupDialog({ open, onClose, desktops, desktop, onImported }: Props) {
-  return (
-    <Dialog open={open} onClose={onClose} title="备份与恢复">
-      <Content onClose={onClose} desktops={desktops} desktop={desktop} onImported={onImported} />
-    </Dialog>
-  )
 }
 
 function download(blob: Blob, filename: string) {
@@ -37,7 +28,7 @@ const MODES: { value: ImportMode; label: string; hint: string }[] = [
   { value: 'replace', label: '替换全部数据', hint: '先清空现有的全部桌面' },
 ]
 
-function Content({ onClose, desktops, desktop, onImported }: Omit<Props, 'open'>) {
+export function BackupSettings({ onClose, desktops, desktop, onImported }: Props) {
   const act = useAct()
   const { confirm, toast } = useUi()
   const fileInput = useRef<HTMLInputElement>(null)
@@ -48,8 +39,11 @@ function Content({ onClose, desktops, desktop, onImported }: Omit<Props, 'open'>
   // Lets an export that finishes after the dialog was closed skip its state update
   const mounted = useRef(true)
   useEffect(
-    () => () => {
-      mounted.current = false
+    () => {
+      mounted.current = true
+      return () => {
+        mounted.current = false
+      }
     },
     [],
   )
