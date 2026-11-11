@@ -156,7 +156,7 @@ function Home({ board }: { board: Board }) {
   const onTouchEnd = (event: TouchEvent) => {
     const start = touchStart.current
     touchStart.current = null
-    if (!start) return
+    if (!start || editing) return
     const dx = event.changedTouches[0].clientX - start.x
     const dy = event.changedTouches[0].clientY - start.y
     if (Math.abs(dx) >= SWIPE_DISTANCE && Math.abs(dx) > Math.abs(dy) * 2) stepDesktop(dx < 0 ? 1 : -1)
@@ -208,7 +208,15 @@ function Home({ board }: { board: Board }) {
               </p>
             </div>
           ) : (
-            <BoardView desktop={desktop} groups={result.groups} editing={editing} sortable={editing && !searching} matchedLinks={result.matchedLinks} onEditSite={setEditingSiteId} />
+            <BoardView
+              desktop={desktop}
+              groups={result.groups}
+              editing={editing}
+              sortable={!searching}
+              matchedLinks={result.matchedLinks}
+              onEditSite={setEditingSiteId}
+              onStartEditing={() => setEditing(true)}
+            />
           )}
 
           {elsewhere.length > 0 && (

@@ -16,11 +16,47 @@ import { arrayMove, rectSortingStrategy, SortableContext, sortableKeyboardCoordi
 import { CSS } from '@dnd-kit/utilities'
 import { useQueryClient } from '@tanstack/react-query'
 import { Check, GripVertical, Pencil, Plus, Trash2 } from 'lucide-react'
-import { useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import type { Board, Desktop, Group, Site, View } from '../../shared/types'
 import { api } from '../api'
 import { useAct, useUi } from '../ui'
 import { SiteCard } from './SiteCard'
+
+const toElement = (node: EventTarget | null): Element | null => {
+  if (!node || typeof node !== 'object') return null
+  if ('closest' in node && typeof (node as { closest?: unknown }).closest === 'function') return node as Element
+  if ('parentElement' in node) return toElement((node as { parentElement?: EventTarget | null }).parentElement ?? null)
+  return null
+}
+
+export class GripPointerSensor extends PointerSensor {
+  static activators = [
+    {
+      eventName: 'onPointerDown' as const,
+      handler: ({ nativeEvent: event }: ReactPointerEvent) => {
+        if (!event.isPrimary || event.button !== 0) return false
+        const element = toElement(event.target)
+        return !!element?.closest('[data-drag-handle]')
+      },
+    },
+  ]
+}
+
+export class LongPressPointerSensor extends PointerSensor {
+  static activators = [
+    {
+      eventName: 'onPointerDown' as const,
+      handler: ({ nativeEvent: event }: ReactPointerEvent) => {
+        if (!event.isPrimary || event.button !== 0) return false
+        const element = toElement(event.target)
+        if (!element) return false
+        if (element.closest('[data-drag-handle]')) return false
+        if (element.closest('button, input, textarea, select, [data-open]')) return false
+        return true
+      },
+    },
+  ]
+}
 
 // Sortable ids are prefixed so groups and cards can share one DndContext
 type Ref = { type: 'g' | 's'; id: number }
@@ -53,15 +89,78 @@ interface Props {
   sortable: boolean
   matchedLinks: Set<number>
   onEditSite: (siteId: number) => void
+  onStartEditing?: () => void
 }
 
-export function BoardView({ desktop, groups, editing, sortable, matchedLinks, onEditSite }: Props) {
+export function BoardView({ desktop, groups, editing, sortable, matchedLinks, onEditSite, onStartEditing }: Props) {
   const queryClient = useQueryClient()
-  const { toast } = useUi()
+  const act = useAct()
+  const { toast, confirm } = useUi()
   const [draft, setDraft] = useState<Group[] | null>(null)
   const [activeSite, setActiveSite] = useState<Site | null>(null)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; site: Site } | null>(null)
+  const contextMenuRef = useRef<HTMLDivElement>(null)
+  const dragJustEndedRef = useRef(false)
+
+  const removeSite = useCallback(
+    async (site: Site) => {
+      const ok = await confirm({
+        title: `删除「${site.title}」？`,
+        message: site.links.length ? `卡片上的 ${site.links.length} 个链接会一并删除。` : undefined,
+        confirmText: '删除',
+        danger: true,
+      })
+      if (ok) void act(() => api.deleteSite(site.id), '卡片已删除')
+    },
+    [confirm, act],
+  )
+
+  const handleContextMenu = useCallback((e: React.MouseEvent, site: Site) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      site,
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!contextMenu) return
+
+    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
+      if (!contextMenuRef.current?.contains(event.target as Node)) {
+        setContextMenu(null)
+      }
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation()
+        setContextMenu(null)
+      }
+    }
+    const handleScroll = () => {
+      setContextMenu(null)
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('touchstart', handlePointerDown)
+    window.addEventListener('keydown', handleKeyDown, true)
+    window.addEventListener('scroll', handleScroll, true)
+    window.addEventListener('resize', handleScroll)
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('touchstart', handlePointerDown)
+      window.removeEventListener('keydown', handleKeyDown, true)
+      window.removeEventListener('scroll', handleScroll, true)
+      window.removeEventListener('resize', handleScroll)
+    }
+  }, [contextMenu])
+
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(GripPointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(LongPressPointerSensor, { activationConstraint: { delay: 400, tolerance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
   const view = draft ?? groups
@@ -87,6 +186,11 @@ export function BoardView({ desktop, groups, editing, sortable, matchedLinks, on
   }
 
   const onDragEnd = ({ active, over }: DragEndEvent) => {
+    dragJustEndedRef.current = true
+    setTimeout(() => {
+      dragJustEndedRef.current = false
+    }, 250)
+
     let next = draft ?? groups
     if (over) {
       const a = ref(active.id)
@@ -129,12 +233,18 @@ export function BoardView({ desktop, groups, editing, sortable, matchedLinks, on
       collisionDetection={collisionDetection}
       onDragStart={({ active }) => {
         const a = ref(active.id)
+        if (!editing) onStartEditing?.()
+        navigator.vibrate?.(40)
         setDraft(groups)
         setActiveSite(a.type === 's' ? (groups.flatMap((g) => g.sites).find((s) => s.id === a.id) ?? null) : null)
       }}
       onDragOver={onDragOver}
       onDragEnd={onDragEnd}
       onDragCancel={() => {
+        dragJustEndedRef.current = true
+        setTimeout(() => {
+          dragJustEndedRef.current = false
+        }, 250)
         setDraft(null)
         setActiveSite(null)
       }}
@@ -142,7 +252,18 @@ export function BoardView({ desktop, groups, editing, sortable, matchedLinks, on
       <SortableContext items={view.map((g) => `g-${g.id}`)} strategy={verticalListSortingStrategy}>
         <div className="flex flex-col gap-9">
           {view.map((group) => (
-            <GroupSection key={group.id} group={group} view={desktop.view} editing={editing} sortable={sortable} matchedLinks={matchedLinks} onEditSite={onEditSite} />
+            <GroupSection
+              key={group.id}
+              group={group}
+              view={desktop.view}
+              editing={editing}
+              sortable={sortable}
+              matchedLinks={matchedLinks}
+              onEditSite={onEditSite}
+              onDeleteSite={removeSite}
+              onContextMenu={handleContextMenu}
+              dragJustEndedRef={dragJustEndedRef}
+            />
           ))}
         </div>
       </SortableContext>
@@ -150,15 +271,68 @@ export function BoardView({ desktop, groups, editing, sortable, matchedLinks, on
       <DragOverlay dropAnimation={{ duration: 200, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' }}>
         {activeSite && <SiteCard site={activeSite} view={desktop.view} editing lifted />}
       </DragOverlay>
+
+      {contextMenu && (
+        <div
+          ref={contextMenuRef}
+          style={{
+            left: `${Math.max(8, Math.min(contextMenu.x, window.innerWidth - 148))}px`,
+            top: `${Math.max(8, Math.min(contextMenu.y, window.innerHeight - 90))}px`,
+          }}
+          className="fixed z-50 min-w-32 animate-rise rounded-xl border border-line bg-surface p-1 shadow-pop [animation-duration:0.12s]"
+        >
+          <button
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm transition hover:bg-fg/6"
+            onClick={() => {
+              const id = contextMenu.site.id
+              setContextMenu(null)
+              onEditSite(id)
+            }}
+          >
+            <Pencil size={14} className="text-muted" />
+            <span>编辑</span>
+          </button>
+          <button
+            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm text-danger transition hover:bg-danger/10"
+            onClick={() => {
+              const site = contextMenu.site
+              setContextMenu(null)
+              void removeSite(site)
+            }}
+          >
+            <Trash2 size={14} />
+            <span>删除</span>
+          </button>
+        </div>
+      )}
     </DndContext>
   )
 }
 
-function GroupSection({ group, view, editing, sortable, matchedLinks, onEditSite }: Omit<Props, 'groups' | 'desktop'> & { group: Group; view: View }) {
+function GroupSection({
+  group,
+  view,
+  editing,
+  sortable,
+  matchedLinks,
+  onEditSite,
+  onDeleteSite,
+  onContextMenu,
+  dragJustEndedRef,
+}: Omit<Props, 'groups' | 'desktop'> & {
+  group: Group
+  view: View
+  onDeleteSite: (site: Site) => void
+  onContextMenu: (e: React.MouseEvent, site: Site) => void
+  dragJustEndedRef: React.RefObject<boolean>
+}) {
   const act = useAct()
   const { confirm } = useUi()
   const [renaming, setRenaming] = useState(false)
-  const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id: `g-${group.id}`, disabled: !sortable })
+  const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
+    id: `g-${group.id}`,
+    disabled: !sortable || !editing,
+  })
 
   const rename = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -214,7 +388,13 @@ function GroupSection({ group, view, editing, sortable, matchedLinks, onEditSite
               <Trash2 size={14} />
             </button>
             {sortable && (
-              <button className="icon-btn-sm cursor-grab touch-none active:cursor-grabbing" aria-label="拖动分组排序" {...attributes} {...listeners}>
+              <button
+                className="icon-btn-sm cursor-grab touch-none active:cursor-grabbing"
+                aria-label="拖动分组排序"
+                data-drag-handle="true"
+                {...attributes}
+                {...listeners}
+              >
                 <GripVertical size={15} />
               </button>
             )}
@@ -231,7 +411,19 @@ function GroupSection({ group, view, editing, sortable, matchedLinks, onEditSite
           // Small cards carry their edit buttons above the top edge, which needs taller row gaps
           <div className={`${GRID[view]} ${view === 'small' && editing ? 'gap-y-5 pt-1.5' : ''}`}>
             {group.sites.map((site, index) => (
-              <SortableSite key={site.id} site={site} view={view} index={index} editing={editing} sortable={sortable} matchedLinks={matchedLinks} onEdit={() => onEditSite(site.id)} />
+              <SortableSite
+                key={site.id}
+                site={site}
+                view={view}
+                index={index}
+                editing={editing}
+                sortable={sortable}
+                matchedLinks={matchedLinks}
+                onEdit={() => onEditSite(site.id)}
+                onDelete={() => onDeleteSite(site)}
+                onContextMenu={onContextMenu}
+                dragJustEndedRef={dragJustEndedRef}
+              />
             ))}
           </div>
         )}
@@ -248,29 +440,29 @@ interface SortableSiteProps {
   sortable: boolean
   matchedLinks: Set<number>
   onEdit: () => void
+  onDelete: () => void
+  onContextMenu: (e: React.MouseEvent, site: Site) => void
+  dragJustEndedRef: React.RefObject<boolean>
 }
 
-function SortableSite({ site, view, index, editing, sortable, matchedLinks, onEdit }: SortableSiteProps) {
+function SortableSite({ site, view, index, editing, sortable, matchedLinks, onEdit, onDelete, onContextMenu, dragJustEndedRef }: SortableSiteProps) {
   const act = useAct()
-  const { confirm } = useUi()
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id: `s-${site.id}`, disabled: !sortable })
-
-  const remove = async () => {
-    const ok = await confirm({
-      title: `删除「${site.title}」？`,
-      message: site.links.length ? `卡片上的 ${site.links.length} 个链接会一并删除。` : undefined,
-      confirmText: '删除',
-      danger: true,
-    })
-    if (ok) void act(() => api.deleteSite(site.id), '卡片已删除')
-  }
 
   return (
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
       // An open link menu has to sit above the cards after this one
-      className={`relative has-[[data-open]]:z-20 ${isDragging ? 'opacity-30' : ''}`}
+      className={`relative select-none [-webkit-touch-callout:none] has-[[data-open]]:z-20 ${isDragging ? 'opacity-30' : ''}`}
+      onContextMenu={(e) => onContextMenu(e, site)}
+      onClickCapture={(e) => {
+        if (dragJustEndedRef.current) {
+          e.preventDefault()
+          e.stopPropagation()
+        }
+      }}
+      {...listeners}
     >
       {/* The entrance animation lives on an inner element so it doesn't fight the drag transform */}
       <div className="h-full animate-rise" style={{ animationDelay: `${Math.min(index, 12) * 30}ms` }}>
@@ -281,7 +473,7 @@ function SortableSite({ site, view, index, editing, sortable, matchedLinks, onEd
           matchedLinks={matchedLinks}
           handleProps={sortable ? { ...attributes, ...listeners } : { hidden: true }}
           onEdit={onEdit}
-          onDelete={remove}
+          onDelete={onDelete}
           onDeleteLink={(linkId) => void act(() => api.deleteLink(linkId))}
         />
       </div>

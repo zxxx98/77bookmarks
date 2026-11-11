@@ -37,7 +37,7 @@ function LargeCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
 
   return (
     <div
-      className={`group/card relative h-full rounded-2xl border border-line bg-surface transition duration-200 ${
+      className={`group/card relative h-full select-none rounded-2xl border border-line bg-surface transition duration-200 [-webkit-touch-callout:none] ${
         lifted ? 'scale-[1.03] shadow-card-hover' : 'shadow-card hover:-translate-y-0.5 hover:shadow-card-hover'
       }`}
     >
@@ -45,6 +45,7 @@ function LargeCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
         href={site.origin}
         target="_blank"
         rel="noreferrer"
+        draggable={false}
         className={`flex items-center gap-3 rounded-2xl p-4 ${focusRing} ${editing ? 'pr-26' : ''} ${site.links.length ? 'pb-3' : ''}`}
       >
         <SiteIcon site={site} />
@@ -83,7 +84,7 @@ function SmallCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
   return (
     <div
       ref={menu.ref}
-      className={`group/card relative h-full rounded-xl border border-line bg-surface transition duration-200 ${
+      className={`group/card relative h-full select-none rounded-xl border border-line bg-surface transition duration-200 [-webkit-touch-callout:none] ${
         lifted ? 'scale-[1.04] shadow-card-hover' : 'shadow-card hover:-translate-y-0.5 hover:shadow-card-hover'
       }`}
     >
@@ -92,6 +93,7 @@ function SmallCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
           href={site.origin}
           target="_blank"
           rel="noreferrer"
+          draggable={false}
           title={`${site.title}\n${hostOf(site.origin)}`}
           className={`flex min-w-0 flex-1 items-center gap-2.5 rounded-xl p-2.5 ${focusRing}`}
         >
@@ -158,11 +160,11 @@ function SmallCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
 function ListRow({ site, editing, matchedLinks, handleProps, lifted, onEdit, onDelete, onDeleteLink }: Props) {
   return (
     <div
-      className={`group/card relative flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-line bg-surface px-3 py-2 transition duration-200 ${
+      className={`group/card relative flex flex-wrap items-center gap-x-3 gap-y-1.5 select-none rounded-xl border border-line bg-surface px-3 py-2 transition duration-200 [-webkit-touch-callout:none] ${
         lifted ? 'shadow-card-hover' : 'hover:border-accent/35 hover:shadow-card'
       }`}
     >
-      <a href={site.origin} target="_blank" rel="noreferrer" className={`flex min-w-0 items-center gap-2.5 rounded-lg max-sm:flex-1 sm:w-72 sm:shrink-0 ${focusRing}`}>
+      <a href={site.origin} target="_blank" rel="noreferrer" draggable={false} className={`flex min-w-0 items-center gap-2.5 rounded-lg max-sm:flex-1 sm:w-72 sm:shrink-0 ${focusRing}`}>
         <SiteIcon site={site} size={26} />
         <span className="truncate text-sm font-semibold">{site.title}</span>
         <span className="min-w-0 flex-1 truncate text-xs text-faint">{hostOf(site.origin)}</span>
@@ -198,6 +200,7 @@ function LinkChip({ site, link, matched, editing, onDelete }: LinkChipProps) {
         href={fullUrl(site.origin, link.path)}
         target="_blank"
         rel="noreferrer"
+        draggable={false}
         title={`${link.title}\n${link.path}`}
         className={`max-w-44 truncate rounded-full py-1 ${focusRing} ${editing ? 'pr-1 pl-2.5' : 'px-2.5'}`}
       >
@@ -237,7 +240,7 @@ function Actions({ className, compact, handleProps, onEdit, onDelete }: ActionsP
       <button className={`${button} hover:!bg-danger/10 hover:!text-danger`} aria-label="删除卡片" onClick={onDelete}>
         <Trash2 size={size} />
       </button>
-      <button className={`${button} cursor-grab touch-none active:cursor-grabbing`} aria-label="拖动排序" {...handleProps}>
+      <button className={`${button} cursor-grab touch-none active:cursor-grabbing`} aria-label="拖动排序" data-drag-handle="true" {...handleProps}>
         <GripVertical size={size + 1} />
       </button>
     </div>
