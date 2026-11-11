@@ -58,6 +58,26 @@ export class LongPressPointerSensor extends PointerSensor {
   ]
 }
 
+class CardPointerSensor extends PointerSensor {
+  constructor(props: ConstructorParameters<typeof PointerSensor>[0]) {
+    super({
+      ...props,
+      options: {
+        ...props.options,
+        activationConstraint: toElement(props.event.target)?.closest('[data-drag-handle]') ? { distance: 4 } : { delay: 400, tolerance: 8 },
+      },
+    })
+  }
+
+  // dnd-kit keeps one handler per event name, so both pointer gestures share one sensor
+  static activators = [
+    {
+      eventName: 'onPointerDown' as const,
+      handler: (event: ReactPointerEvent) => GripPointerSensor.activators[0].handler(event) || LongPressPointerSensor.activators[0].handler(event),
+    },
+  ]
+}
+
 // Sortable ids are prefixed so groups and cards can share one DndContext
 type Ref = { type: 'g' | 's'; id: number }
 const ref = (id: UniqueIdentifier): Ref => ({ type: String(id)[0] as Ref['type'], id: Number(String(id).slice(2)) })
@@ -159,8 +179,7 @@ export function BoardView({ desktop, groups, editing, sortable, matchedLinks, on
   }, [contextMenu])
 
   const sensors = useSensors(
-    useSensor(GripPointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(LongPressPointerSensor, { activationConstraint: { delay: 400, tolerance: 8 } }),
+    useSensor(CardPointerSensor),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
       // Enter finishes layout editing even when a drag handle still has focus
