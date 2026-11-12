@@ -1,6 +1,6 @@
 import type { Todo } from './types'
 
-/** One change to the list, as made on screen and then repeated on the server */
+/** One change to the list, as made on screen and then repeated on the local store */
 export type TodoOp =
   | { type: 'add'; tempId: number; text: string }
   | { type: 'edit'; id: number; text: string }
@@ -11,7 +11,7 @@ export type TodoOp =
 
 const isOpen = (todo: Todo) => todo.doneAt === null
 
-/** The list as the server will have it once `op` has gone through: open to-dos first, in order, then the finished ones */
+/** The list as the local store will have it once `op` has gone through: open to-dos first, in order, then the finished ones */
 export function applyTodoOp(todos: Todo[], op: TodoOp): Todo[] {
   switch (op.type) {
     case 'add':
@@ -31,7 +31,7 @@ export function applyTodoOp(todos: Todo[], op: TodoOp): Todo[] {
     case 'reorder': {
       const open = new Map(todos.filter(isOpen).map((todo) => [todo.id, todo]))
       const arranged = op.ids.flatMap((id) => open.get(id) ?? [])
-      // Open to-dos the order doesn't mention are ones just added, which the server keeps on top
+      // Open to-dos the order doesn't mention are ones just added, which the local store keeps on top
       const unmentioned = [...open.values()].filter((todo) => !op.ids.includes(todo.id))
       return [...unmentioned, ...arranged, ...todos.filter((todo) => !isOpen(todo))]
     }

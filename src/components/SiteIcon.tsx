@@ -1,3 +1,5 @@
+import { useQuery } from '@tanstack/react-query'
+import { api } from '../api'
 import { useState, type CSSProperties } from 'react'
 import type { Site } from '../../shared/types'
 import { hostOf } from '../../shared/url'
@@ -44,7 +46,8 @@ export function SiteIcon({ site, size = 40 }: { site: Pick<Site, 'id' | 'origin'
   const [failed, setFailed] = useState<string[]>([])
   const [styleId] = useStyle()
   const dark = useIsDark()
-  const stored = site.iconVersion > 0 ? `/api/icon/${site.id}?v=${site.iconVersion}` : null
+  const cached = useQuery({ queryKey: ['icon', site.id, site.iconVersion], queryFn: () => api.icon(site.id), enabled: site.iconVersion > 0, staleTime: Infinity })
+  const stored = cached.data
   const src = [site.iconUrl, stored].find((source) => source && !failed.includes(source))
   const borderRadius = styleId === 'swiss' ? 0 : Math.round(size * 0.22)
   const boxStyle: CSSProperties = { width: size, height: size, borderRadius }

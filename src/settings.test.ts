@@ -5,13 +5,13 @@ import { readSettings, rememberSettings } from './settings'
 afterEach(() => vi.unstubAllGlobals())
 
 describe('cached display settings', () => {
-  it('preserves the saved opening preference before the server responds', () => {
+  it('preserves the saved opening preference before the local store responds', () => {
     const settings = { siteName: '工作台', openInNewTab: false }
     vi.stubGlobal('localStorage', { getItem: () => JSON.stringify(settings), setItem: vi.fn() })
     expect(readSettings()).toEqual({ ...settings, layoutColumns: 1 })
   })
 
-  it('uses the cached layout before the server responds', () => {
+  it('uses the cached layout before the local store responds', () => {
     const settings = { siteName: '工作台', openInNewTab: true, layoutColumns: 4 }
     vi.stubGlobal('localStorage', { getItem: () => JSON.stringify(settings) })
     expect(readSettings()).toEqual(settings)

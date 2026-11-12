@@ -9,8 +9,21 @@
     "allowJs": true,
     "checkJs": true,
     "skipLibCheck": true,
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["vite/client"]
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [
+      "vite/client",
+      "chrome"
+    ]
   },
-  "include": ["src", "shared", "vite.config.ts", "extension/lib.js"]
+  "include": [
+    "src",
+    "shared",
+    "vite.config.ts",
+    "extension/**/*.ts",
+    "extension/lib.js"
+  ]
 }

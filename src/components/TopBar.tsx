@@ -1,4 +1,4 @@
-import { ChartNoAxesColumn, Check, ChevronDown, CornerDownLeft, Ellipsis, FoldVertical, ListTodo, LockKeyhole, LogOut, Monitor, Moon, Palette, Pencil, Plus, Settings, Sun, UnfoldVertical, X } from 'lucide-react'
+import { ChartNoAxesColumn, Check, ChevronDown, CornerDownLeft, Ellipsis, FoldVertical, ListTodo, Monitor, Moon, Palette, Pencil, Plus, Settings, Sun, UnfoldVertical, X } from 'lucide-react'
 import type { RefObject } from 'react'
 import type { Desktop, DesktopSummary, View } from '../../shared/types'
 import { SEARCH_ENGINES, SearchEngineIcon, useSearchEngine, type SearchEngineId } from '../engines'
@@ -58,8 +58,6 @@ interface Props {
   /** Open to-dos, once the list has loaded */
   todoCount?: number
   onToggleTodos: () => void
-  onLock: () => void
-  onLogout: () => void
 }
 
 export function TopBar({
@@ -84,8 +82,6 @@ export function TopBar({
   todoOpen,
   todoCount,
   onToggleTodos,
-  onLock,
-  onLogout,
 }: Props) {
   const [theme, setTheme] = useTheme()
   const [styleId, setStyleId, activePreset] = useStyle()
@@ -206,8 +202,6 @@ export function TopBar({
           onToggleCollapseAll={onToggleCollapseAll}
           onSettings={onSettings}
           onUsage={onUsage}
-          onLock={onLock}
-          onLogout={onLogout}
         />
         <button className="btn btn-primary max-sm:w-9 max-sm:px-0" onClick={onAdd} aria-label="添加书签">
           <Plus size={16} strokeWidth={2.5} />
@@ -377,11 +371,9 @@ interface MenuProps {
   onToggleCollapseAll?: () => void
   onSettings: () => void
   onUsage: () => void
-  onLock: () => void
-  onLogout: () => void
 }
 
-function MoreMenu({ view, onView, theme, onTheme, styleId, onStyle, allCollapsed, onToggleCollapseAll, onSettings, onUsage, onLock, onLogout }: MenuProps) {
+function MoreMenu({ view, onView, theme, onTheme, styleId, onStyle, allCollapsed, onToggleCollapseAll, onSettings, onUsage }: MenuProps) {
   const menu = usePopover<HTMLDivElement>()
 
   const item = 'flex w-full items-center gap-2.5 rounded-control px-2.5 py-2 text-left text-sm hover:bg-fg/6'
@@ -458,16 +450,6 @@ function MoreMenu({ view, onView, theme, onTheme, styleId, onStyle, allCollapsed
           >
             <Settings size={15} className="text-muted" />
             系统设置
-          </button>
-          <div className="my-1 h-px bg-line" />
-          <button className={item} onClick={onLock}>
-            <LockKeyhole size={15} className="text-muted" />
-            锁定
-            <kbd className="ml-auto font-mono text-xs text-faint">Ctrl+L</kbd>
-          </button>
-          <button className={item} onClick={onLogout}>
-            <LogOut size={15} className="text-muted" />
-            退出登录
           </button>
         </div>
       )}

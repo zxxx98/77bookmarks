@@ -1,3 +1,4 @@
+import { preferences } from './preferences'
 import { useSyncExternalStore, type ReactNode } from 'react'
 
 export type SearchEngineId = 'google' | 'bing' | 'baidu' | 'duckduckgo' | 'github'
@@ -131,7 +132,7 @@ function subscribe(listener: () => void) {
 export function setSearchEngine(id: SearchEngineId) {
   currentEngineId = id
   if (typeof localStorage !== 'undefined') {
-    localStorage.setItem(ENGINE_KEY, id)
+    preferences.setItem(ENGINE_KEY, id)
   }
   notify()
 }
@@ -145,3 +146,5 @@ export function useSearchEngine(): [SearchEngine, (id: SearchEngineId) => void] 
   const engine = getSearchEngine(engineId)
   return [engine, setSearchEngine]
 }
+
+if (typeof window !== 'undefined') window.addEventListener('77bookmarks:preferences-restored', () => { currentEngineId = storedEngine(); notify() })

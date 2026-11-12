@@ -13,7 +13,7 @@
 
 - **端口与监听地址**：
   - 本地预览服务统一监听在 **`0.0.0.0:8788`**。
-  - 预览启动参考：`npx wrangler pages dev dist --ip 0.0.0.0 --port 8788 --persist-to .wrangler/state --live-reload`。
+  - 预览启动参考：`npm run preview`。
 - **每个功能做完后必须更新预览**：
   - 每次功能开发或调整完成后，必须重新构建打包前端产物（`npm run build`），确保 `dist/` 目录为最新构建。
   - 确保 `0.0.0.0:8788` 的本地预览服务处于正常运行状态，并已加载最新产物。
@@ -22,9 +22,11 @@
 
 ## 3. 本地环境与开发规范备忘
 
-- **环境凭证与数据持久化**：
-  - 本地环境变量位于 `.dev.vars`（`ADMIN_PASSWORD` 与 `SESSION_SECRET`）。
-  - 本地 D1 数据库位于 `.wrangler/state`，不同 worktree 应软链接到主目录以保持数据持久与一致。
+- **扩展与数据持久化**：
+  - 当前项目为本地 Chrome / Edge 新标签页扩展，数据保存在当前浏览器个人资料中。
+  - 安装目录为构建生成的 `dist-extension/`，不能加载源码 `extension/`。
+  - 本地 IndexedDB 数据由浏览器个人资料管理；开发预览与扩展的数据相互独立。
+  - 数据层变更需验证事务、备份兼容和持久化；扩展入口变更运行 `npm run test:extension`。
 - **构建与测试**：
   - 涉及逻辑和组件改动时，确保 `npm test` 和 `npm run typecheck` 通过。
   - 单纯文档类变更（如本文档自身）可直接提交，不需要走测试流程。

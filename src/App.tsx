@@ -1,3 +1,4 @@
+import { preferences } from './preferences'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowUpRight, BookmarkPlus, LoaderCircle, SearchX } from 'lucide-react'
 import { motion } from 'motion/react'
@@ -5,13 +6,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } fr
 import type { SystemSettings } from '../shared/settings'
 import type { BoardPage, View } from '../shared/types'
 import { parseBookmarkUrl } from '../shared/url'
-import { api, ApiError } from './api'
+import { api } from './api'
+import { onDataChanged } from './storage/client'
 import { updateBoardCache } from './board-cache'
 import { recordClick } from './clicks'
 import { AddBookmarkDialog } from './components/AddBookmarkDialog'
 import { BoardView } from './components/BoardView'
 import { EditSiteDialog } from './components/EditSiteDialog'
-import { LoginPage } from './components/LoginPage'
 import { SettingsDialog } from './components/SettingsDialog'
 import { TodoPanel } from './components/TodoPanel'
 import { TopBar } from './components/TopBar'
@@ -20,21 +21,13 @@ import { SEARCH_ENGINES, SearchEngineIcon, useSearchEngine } from './engines'
 import { useLazyIcons } from './lazy-icons'
 import { searchBoard } from './search'
 import { readSettings } from './settings'
-import { TODOS_KEY, useTodos } from './todos'
+import { useTodos } from './todos'
 import { UiProvider, useUi } from './ui'
 
 const DESKTOP_KEY = 'desktop'
 const SWIPE_DISTANCE = 70
-const LOCK_KEY = 'bookmarks-lock'
 const TODO_PANEL_KEY = 'todo-panel'
-// Screen width from which the to-do panel stands beside the bookmarks instead of above them
 const PANEL_BESIDE = '(min-width: 1024px)'
-type LockMode = 'locked' | 'signed-out'
-
-function storedLockMode(): LockMode | null {
-  const value = localStorage.getItem(LOCK_KEY)
-  return value === 'locked' || value === 'signed-out' ? value : null
-}
 
 /** Until the user folds or unfolds it: open where it fits beside the bookmarks, folded where it would push them down */
 function storedTodoOpen(): boolean {
@@ -50,14 +43,11 @@ function canUseGlobalShortcut(event: KeyboardEvent | ClipboardEvent) {
 export default function App() {
   const queryClient = useQueryClient()
   const [desktopId, setDesktopId] = useState(() => Number(localStorage.getItem(DESKTOP_KEY)))
-  const [lockMode, setLockMode] = useState(storedLockMode)
   const previousPage = useRef<BoardPage | undefined>(undefined)
-  const logoutFlight = useRef<Promise<unknown>>(Promise.resolve())
   const board = useQuery({
     queryKey: ['board', desktopId],
     queryFn: () => api.board(desktopId),
     retry: false,
-    enabled: !lockMode,
     placeholderData: keepPreviousData,
   })
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.settings, placeholderData: readSettings })
@@ -68,80 +58,24 @@ export default function App() {
     document.title = siteName
   }, [siteName])
 
-  const clearBookmarks = useCallback(() => {
-    previousPage.current = undefined
-    void queryClient.cancelQueries({ queryKey: ['board'] })
-    void queryClient.cancelQueries({ queryKey: ['board-search'] })
-    queryClient.removeQueries({ queryKey: ['board'] })
-    queryClient.removeQueries({ queryKey: ['board-search'] })
-    // Everything else that was read with the session goes with it
-    for (const queryKey of [TODOS_KEY, ['usage'], ['token']]) {
-      void queryClient.cancelQueries({ queryKey })
-      queryClient.removeQueries({ queryKey })
+  useEffect(() => onDataChanged(() => {
+    // Another tab, the toolbar popup or the context menu may have changed local data.
+    for (const key of ['board', 'board-search', 'todos', 'usage', 'settings']) {
+      void queryClient.invalidateQueries({ queryKey: [key] })
     }
-  }, [queryClient])
+  }), [queryClient])
 
   useEffect(() => {
-    if (lockMode || !board.data || board.isPlaceholderData) return
+    if (!board.data || board.isPlaceholderData) return
     previousPage.current = board.data
     const resolvedId = board.data.desktop.id
-    localStorage.setItem(DESKTOP_KEY, String(resolvedId))
+    preferences.setItem(DESKTOP_KEY, String(resolvedId))
     if (desktopId !== resolvedId) {
       queryClient.setQueryData(['board', resolvedId], board.data)
       setDesktopId(resolvedId)
     }
-  }, [board.data, board.isPlaceholderData, desktopId, queryClient, lockMode])
+  }, [board.data, board.isPlaceholderData, desktopId, queryClient])
 
-  const endSession = useCallback((mode: LockMode) => {
-    // Hide the board immediately, and persist the lock before contacting the server.
-    localStorage.setItem(LOCK_KEY, mode)
-    setLockMode(mode)
-    clearBookmarks()
-    // Login waits for logout, so a slow logout cannot erase the newly issued cookie.
-    logoutFlight.current = api.logout().catch(() => undefined)
-  }, [clearBookmarks])
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (!event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || event.key.toLowerCase() !== 'l' || event.isComposing) return
-      if (!board.data && !lockMode) return
-      event.preventDefault()
-      event.stopImmediatePropagation()
-      if (!lockMode && !event.repeat) endSession('locked')
-    }
-    // Capture also works while an input, menu, dialog, or drag is active.
-    window.addEventListener('keydown', onKey, true)
-    return () => window.removeEventListener('keydown', onKey, true)
-  }, [board.data, lockMode, endSession])
-
-  useEffect(() => {
-    const onStorage = (event: StorageEvent) => {
-      if (event.key !== LOCK_KEY && event.key !== null) return
-      const mode = storedLockMode()
-      if (mode) {
-        setLockMode(mode)
-        clearBookmarks()
-      } else {
-        // Another tab has verified the password; refresh before showing its session.
-        void board.refetch().then((result) => {
-          if (!result.error && !storedLockMode()) setLockMode(null)
-        })
-      }
-    }
-    window.addEventListener('storage', onStorage)
-    return () => window.removeEventListener('storage', onStorage)
-  }, [board.refetch, clearBookmarks])
-
-  const loggedIn = async () => {
-    const result = await board.refetch()
-    if (result.error) throw result.error
-    localStorage.removeItem(LOCK_KEY)
-    setLockMode(null)
-  }
-
-  if (lockMode || (board.error instanceof ApiError && board.error.status === 401)) {
-    return <LoginPage siteName={siteName} locked={lockMode === 'locked'} beforeLogin={() => logoutFlight.current} onSuccess={loggedIn} />
-  }
   const page = board.data ?? previousPage.current
   if (page) return (
     <UiProvider>
@@ -156,8 +90,6 @@ export default function App() {
         settingsError={settings.isError}
         onRetrySettings={() => { void settings.refetch() }}
         settings={systemSettings}
-        onLock={() => endSession('locked')}
-        onLogout={() => endSession('signed-out')}
       />
     </UiProvider>
   )
@@ -191,11 +123,9 @@ interface HomeProps {
   settingsError: boolean
   onRetrySettings: () => void
   settings: SystemSettings
-  onLock: () => void
-  onLogout: () => void
 }
 
-function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBoard, settingsReady, settingsError, onRetrySettings, settings, onLock, onLogout }: HomeProps) {
+function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBoard, settingsReady, settingsError, onRetrySettings, settings }: HomeProps) {
   const { siteName, openInNewTab, layoutColumns } = settings
   const queryClient = useQueryClient()
   const { toast } = useUi()
@@ -213,7 +143,7 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
   const showTodos = useCallback((open: boolean) => {
     setTodoOpen(open)
     try {
-      localStorage.setItem(TODO_PANEL_KEY, open ? 'open' : 'closed')
+      preferences.setItem(TODO_PANEL_KEY, open ? 'open' : 'closed')
     } catch { /* The panel still folds, it just isn't remembered. */ }
   }, [])
   const [editingSiteId, setEditingSiteId] = useState<number | null>(null)
@@ -252,7 +182,7 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
     [desktops, desktopIndex, switchDesktop],
   )
 
-  // Saves run one after another, so that quick changes can't reach the server out of order
+  // Saves run one after another, so that quick changes can't reach the local store out of order
   const viewSaves = useRef<Promise<unknown>>(Promise.resolve())
   const setView = useCallback(
     (view: View) => {
@@ -297,7 +227,7 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
       const isAll = desktop.groups.length > 0 && desktop.groups.every((g) => prev.has(g.id))
       const next = isAll ? new Set<number>() : new Set(desktop.groups.map((g) => g.id))
       try {
-        localStorage.setItem(`collapsed-groups-${desktop.id}`, JSON.stringify([...next]))
+        preferences.setItem(`collapsed-groups-${desktop.id}`, JSON.stringify([...next]))
       } catch {}
       return next
     })
@@ -312,7 +242,7 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
         next.add(groupId)
       }
       try {
-        localStorage.setItem(`collapsed-groups-${desktop.id}`, JSON.stringify([...next]))
+        preferences.setItem(`collapsed-groups-${desktop.id}`, JSON.stringify([...next]))
       } catch {}
       return next
     })
@@ -452,8 +382,6 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
         todoOpen={todoOpen}
         todoCount={todos.todos?.filter((todo) => todo.doneAt === null).length}
         onToggleTodos={() => showTodos(!todoOpen)}
-        onLock={onLock}
-        onLogout={onLogout}
       />
       <main className="mx-auto flex max-w-7xl flex-col gap-9 overflow-x-clip px-4 pt-8 pb-24 sm:px-6 lg:flex-row lg:items-start lg:gap-6">
         {/* Takes the place of the last column of groups on wide screens and stays put while they scroll.

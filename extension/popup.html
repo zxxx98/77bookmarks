@@ -9,15 +9,10 @@
     <header class="brand">
       <img src="icons/icon-48.png" alt="" />
       <h1 id="site-name">77 Bookmarks</h1>
-      <button id="open" class="link" hidden>打开书签页</button>
+      <button id="open" class="link">打开书签页</button>
     </header>
 
-    <div id="setup" hidden>
-      <p class="muted" style="margin: 12px 0">还没有连接书签页。在书签页的「更多 → 系统设置 → 浏览器扩展」生成连接码，然后粘贴到扩展选项里。</p>
-      <button id="go-options" class="primary">打开扩展选项</button>
-    </div>
-
-    <form id="form" hidden>
+    <form id="form">
       <div class="page">
         <p class="title" id="page-title"></p>
         <p class="muted" id="page-url"></p>
@@ -36,6 +31,6 @@
       <button id="add" class="primary">添加到书签页</button>
       <p id="status" class="status" role="status"></p>
     </form>
-    <script type="module" src="popup.js"></script>
+    <script type="module" src="popup.ts"></script>
   </body>
 </html>

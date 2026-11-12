@@ -1,3 +1,4 @@
+import { preferences } from './preferences'
 import { DEFAULT_SETTINGS, isLayoutColumns, MAX_SITE_NAME_LENGTH, type SystemSettings } from '../shared/settings'
 
 const SETTINGS_KEY = 'bookmarks-settings'
@@ -15,7 +16,7 @@ export function readSettings(): SystemSettings {
 
 export function rememberSettings(settings: SystemSettings): SystemSettings {
   try {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))
+    preferences.setItem(SETTINGS_KEY, JSON.stringify(settings))
   } catch { /* A full or unavailable storage must not prevent loading or saving. */ }
   return settings
 }

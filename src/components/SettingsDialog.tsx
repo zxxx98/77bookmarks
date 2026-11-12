@@ -1,12 +1,11 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { DatabaseBackup, LayoutGrid, LoaderCircle, Puzzle, Settings } from 'lucide-react'
+import { DatabaseBackup, LayoutGrid, LoaderCircle, Settings } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { MAX_SITE_NAME_LENGTH, type LayoutColumns, type SystemSettings } from '../../shared/settings'
 import type { Desktop, DesktopSummary } from '../../shared/types'
 import { api } from '../api'
 import { Dialog, useUi } from '../ui'
 import { BackupSettings } from './BackupSettings'
-import { ExtensionSettings } from './ExtensionSettings'
 
 interface Props {
   open: boolean
@@ -39,7 +38,7 @@ export function SettingsDialog({ open, ready, loadError, onRetry, ...props }: Pr
 function Content({ settings, importBusy, onBusyChange, ...backupProps }: Omit<Props, 'open' | 'ready' | 'loadError' | 'onRetry'> & { importBusy: boolean; onBusyChange: (busy: boolean) => void }) {
   const queryClient = useQueryClient()
   const { toast } = useUi()
-  const [tab, setTab] = useState<'general' | 'layout' | 'backup' | 'extension'>('general')
+  const [tab, setTab] = useState<'general' | 'layout' | 'backup'>('general')
   const [name, setName] = useState(settings.siteName)
   const [openInNewTab, setOpenInNewTab] = useState(settings.openInNewTab)
   const [layoutColumns, setLayoutColumns] = useState(settings.layoutColumns)
@@ -74,7 +73,6 @@ function Content({ settings, importBusy, onBusyChange, ...backupProps }: Omit<Pr
           { id: 'general', label: '基本设置', icon: Settings },
           { id: 'layout', label: '布局设置', icon: LayoutGrid },
           { id: 'backup', label: '备份与恢复', icon: DatabaseBackup },
-          { id: 'extension', label: '浏览器扩展', icon: Puzzle },
         ] as const).map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -109,7 +107,7 @@ function Content({ settings, importBusy, onBusyChange, ...backupProps }: Omit<Pr
             required
             aria-describedby="site-name-hint"
           />
-          <p id="site-name-hint" className="mt-2 text-xs text-faint">显示在顶栏、登录页和浏览器标题中，最多 {MAX_SITE_NAME_LENGTH} 个字符。</p>
+          <p id="site-name-hint" className="mt-2 text-xs text-faint">显示在顶栏和浏览器标题中，最多 {MAX_SITE_NAME_LENGTH} 个字符。</p>
           <label className="mt-5 flex cursor-pointer items-center gap-2.5 text-sm">
             <input
               type="checkbox"
@@ -166,9 +164,7 @@ function Content({ settings, importBusy, onBusyChange, ...backupProps }: Omit<Pr
       <div role="tabpanel" id="settings-panel-backup" aria-labelledby="settings-tab-backup" hidden={tab !== 'backup'}>
         <BackupSettings {...backupProps} onBusyChange={onBusyChange} importBusy={importBusy} />
       </div>
-      <div role="tabpanel" id="settings-panel-extension" aria-labelledby="settings-tab-extension" hidden={tab !== 'extension'}>
-        <ExtensionSettings />
-      </div>
+
     </>
   )
 }

@@ -5,7 +5,7 @@ import type { Todo } from '../shared/types'
 import { api } from './api'
 import { useUi } from './ui'
 
-/** A to-do the server hasn't stored yet. It has no real id, so it can't be changed until it does */
+/** A to-do the local store hasn't stored yet. It has no real id, so it can't be changed until it does */
 export const isPendingTodo = (todo: Todo) => todo.id < 0
 
 function send(op: TodoOp): Promise<unknown> {
@@ -96,8 +96,8 @@ export interface Todos {
 }
 
 /**
- * The to-do list and the ways to change it. A change shows at once and is then sent to the server;
- * changes are sent one at a time, in the order they were made, so that the server ends up with
+ * The to-do list and the ways to change it. A change shows at once and is then sent to the local store;
+ * changes are sent one at a time, in the order they were made, so that the local store ends up with
  * what is on screen even when they come in quick succession.
  */
 export function useTodos(): Todos {
@@ -121,7 +121,7 @@ export function useTodos(): Todos {
     },
     onError: (error: Error) => toast(error.message, 'error'),
     onSettled: () => {
-      // Checks against the server once nothing else is waiting: a refetch in between would briefly undo the later changes
+      // Checks against the local store once nothing else is waiting: a refetch in between would briefly undo the later changes
       if (queryClient.isMutating({ mutationKey: TODOS_KEY }) === 1) return queryClient.invalidateQueries({ queryKey: TODOS_KEY })
     },
   })

@@ -1,3 +1,4 @@
+import { preferences } from './preferences'
 import { useSyncExternalStore } from 'react'
 
 export type Theme = 'system' | 'light' | 'dark'
@@ -367,15 +368,15 @@ systemDark?.addEventListener('change', () => {
 
 export function setTheme(theme: Theme) {
   currentTheme = theme
-  if (theme === 'system') localStorage.removeItem(THEME_KEY)
-  else localStorage.setItem(THEME_KEY, theme)
+  if (theme === 'system') preferences.removeItem(THEME_KEY)
+  else preferences.setItem(THEME_KEY, theme)
   applyDom()
   notify()
 }
 
 export function setStyle(style: StyleId) {
   currentStyle = style
-  localStorage.setItem(STYLE_KEY, style)
+  preferences.setItem(STYLE_KEY, style)
   applyDom()
   notify()
 }
@@ -394,3 +395,5 @@ export function useStyle(): [StyleId, (style: StyleId) => void, StylePreset] {
 export function useIsDark(): boolean {
   return useSyncExternalStore(subscribe, () => currentTheme === 'dark' || (currentTheme === 'system' && (systemDark?.matches ?? false)))
 }
+
+if (typeof window !== 'undefined') window.addEventListener('77bookmarks:preferences-restored', () => { currentTheme = storedTheme(); currentStyle = storedStyle(); applyDom(); notify() })

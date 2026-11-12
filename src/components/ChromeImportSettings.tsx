@@ -3,7 +3,7 @@ import { useRef, useState, type ChangeEvent } from 'react'
 import { backupStats } from '../../shared/backup'
 import type { DesktopSummary } from '../../shared/types'
 import { api } from '../api'
-import { chromeRows, parseChromeBookmarks, type ChromeImport } from '../chrome-import'
+import { parseChromeBookmarks, type ChromeImport } from '../chrome-import'
 import { useUi } from '../ui'
 
 interface Props {
@@ -13,8 +13,6 @@ interface Props {
   onBusyChange: (busy: boolean) => void
   importBusy: boolean
 }
-
-const BATCH_SIZE = 20
 
 export function ChromeImportSettings({ desktops, onImported, onClose, onBusyChange, importBusy }: Props) {
   const { toast } = useUi()
@@ -54,45 +52,19 @@ export function ChromeImportSettings({ desktops, onImported, onClose, onBusyChan
 
   const runImport = async () => {
     if (!file || busy || importBusy) return
-    const groups = file.data.desktop.groups
-    const rowCount = backupStats([file.data.desktop])
-    const expectedRows = rowCount.sites + rowCount.links
-    let desktopId = 0
     setStage('importing')
     onBusyChange(true)
     setDone(0)
-    setTotal(groups.length + expectedRows)
+    setTotal(0)
     try {
-      const created = await api.createDesktop(file.data.desktop.name)
-      desktopId = created.id
-      const groupIds: number[] = []
-      for (let offset = 0; offset < groups.length; offset += BATCH_SIZE) {
-        const batch = groups.slice(offset, offset + BATCH_SIZE)
-        const result = await api.importChromeGroups(desktopId, offset, batch.map((group) => group.name))
-        if (result.groupIds.length !== batch.length) throw new Error('分组导入不完整')
-        groupIds.push(...result.groupIds)
-        setDone(groupIds.length)
-      }
-      const rows = chromeRows(file.data.desktop, groupIds)
-      for (let offset = 0; offset < rows.length; offset += BATCH_SIZE) {
-        await api.importChromeRows(desktopId, rows.slice(offset, offset + BATCH_SIZE))
-        setDone(groups.length + Math.min(offset + BATCH_SIZE, rows.length))
-      }
-      toast(`已导入 ${rowCount.sites} 张卡片、${rowCount.links} 个链接${file.data.skipped ? `，跳过 ${file.data.skipped} 个非网页或无效网址` : ''}`)
+      const result = await api.importChrome(file.data.desktop)
+      toast(`已导入 ${result.sites} 张卡片、${result.links} 个链接${file.data.skipped ? `，跳过 ${file.data.skipped} 个非网页或无效网址` : ''}`)
       onBusyChange(false)
       setStage('idle')
-      onImported(desktopId)
+      onImported(result.desktopIds[0])
       onClose()
     } catch (error) {
-      let rollbackFailed = false
-      if (desktopId) {
-        try {
-          await api.deleteDesktop(desktopId)
-        } catch {
-          rollbackFailed = true
-        }
-      }
-      toast(`${error instanceof Error ? error.message : '导入失败'}${rollbackFailed ? '；清理未完成，请手动删除新建的 Chrome 桌面' : '；本次导入已清理'}`, 'error')
+      toast(`${error instanceof Error ? error.message : '导入失败'}；本次导入未保存`, 'error')
       setStage('idle')
       onBusyChange(false)
     }
@@ -104,7 +76,7 @@ export function ChromeImportSettings({ desktops, onImported, onClose, onBusyChan
   return (
     <section className="border-t border-line pt-4">
       <h3 className="label">导入 Chrome 书签</h3>
-      <p className="mb-2.5 text-xs leading-relaxed text-faint">在 Chrome 的书签管理器中导出 HTML 文件，再选择该文件。书签会添加为新桌面，嵌套文件夹会成为分组；图标不会导入。</p>
+      <p className="mb-2.5 text-xs leading-relaxed text-faint">在 Chrome 的书签管理器中导出 HTML 文件，再选择该文件。书签会添加为新桌面，嵌套文件夹会成为分组；图标优先使用浏览器缓存。</p>
       <input ref={input} type="file" accept=".html,.htm,text/html" disabled={importBusy} hidden onChange={chooseFile} />
       {!file ? (
         <button
@@ -139,7 +111,7 @@ export function ChromeImportSettings({ desktops, onImported, onClose, onBusyChan
       {busy && (
         <div className="mt-3" role="status" aria-live="polite">
           <div className="mb-1 flex justify-between text-xs text-muted">
-            <span>{stage === 'importing' ? `正在导入 ${done} / ${total} 条记录` : stage === 'parsing' ? `正在解析 ${done} / ${total} 个书签` : '正在读取文件'}</span>
+            <span>{stage === 'importing' ? '正在保存书签…' : stage === 'parsing' ? `正在解析 ${done} / ${total} 个书签` : '正在读取文件'}</span>
             {total > 0 && <span>{progress}%</span>}
           </div>
           <div

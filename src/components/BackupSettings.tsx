@@ -28,7 +28,7 @@ function download(blob: Blob, filename: string) {
 
 const MODES: { value: ImportMode; label: string; hint: string }[] = [
   { value: 'append', label: '添加为新桌面', hint: '现有数据保持不变' },
-  { value: 'replace', label: '替换全部数据', hint: '先清空现有的全部桌面' },
+  { value: 'replace', label: '替换全部数据', hint: '完整备份还会恢复待办和设置' },
 ]
 
 export function BackupSettings({ onClose, desktops, desktop, onImported, onBusyChange, importBusy }: Props) {
@@ -76,7 +76,7 @@ export function BackupSettings({ onClose, desktops, desktop, onImported, onBusyC
     const backup = parseBackup(raw, chosen.name.replace(/\.json$/i, '').slice(0, 20))
     if ('error' in backup) return toast(backup.error, 'error')
     // The normalized form is what gets sent, so that a version 1 backup keeps the desktop name picked here
-    setFile({ name: chosen.name, raw: { version: 2, desktops: backup.desktops }, backup })
+    setFile({ name: chosen.name, raw: { version: backup.local ? 3 : 2, desktops: backup.desktops, ...(backup.local ? { local: backup.local } : {}) }, backup })
   }
 
   const runImport = async () => {
@@ -84,7 +84,7 @@ export function BackupSettings({ onClose, desktops, desktop, onImported, onBusyC
     if (mode === 'replace') {
       const ok = await confirm({
         title: '替换全部数据？',
-        message: `现有的 ${desktops.length} 个桌面及其全部分组、卡片和链接会被备份文件中的内容替换，且无法撤销。`,
+        message: `现有的 ${desktops.length} 个桌面及其全部分组、卡片和链接会被备份文件中的内容替换${file.backup.local ? '，同时恢复待办、设置和使用统计' : '；现有待办和设置会保留'}，且无法撤销。`,
         confirmText: '替换现有数据',
         danger: true,
       })
@@ -113,11 +113,11 @@ export function BackupSettings({ onClose, desktops, desktop, onImported, onBusyC
     <div className="flex flex-col gap-5">
       <section>
         <h3 className="label">导出</h3>
-        <p className="mb-2.5 text-xs leading-relaxed text-faint">备份是一个 JSON 文件，包含桌面、分组、卡片、链接和图标。</p>
+        <p className="mb-2.5 text-xs leading-relaxed text-faint">完整备份包含所有桌面、书签、已保存图标、待办、设置和使用统计。仅导出当前桌面时，只包含该桌面的书签。</p>
         <div className="flex flex-wrap gap-2">
           <button className="btn btn-soft" disabled={exporting !== null || importBusy} onClick={() => exportBackup('all')}>
             {exporting === 'all' ? <LoaderCircle size={15} className="animate-spin" /> : <Download size={15} />}
-            {desktops.length > 1 ? `全部 ${desktops.length} 个桌面` : '导出备份'}
+            导出完整备份
           </button>
           {desktops.length > 1 && (
             <button className="btn btn-soft min-w-0 shrink" disabled={exporting !== null || importBusy} onClick={() => exportBackup('one')}>
@@ -128,6 +128,7 @@ export function BackupSettings({ onClose, desktops, desktop, onImported, onBusyC
         </div>
       </section>
 
+      <p className="text-xs leading-relaxed text-faint">数据仅保存在当前浏览器的此个人资料中。请定期导出备份；卸载扩展会清除本地数据。云同步尚未提供。</p>
       <section className="border-t border-line pt-4">
         <h3 className="label">导入</h3>
         <input ref={fileInput} type="file" accept="application/json,.json" disabled={importBusy} hidden onChange={chooseFile} />

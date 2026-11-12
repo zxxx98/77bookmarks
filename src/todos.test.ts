@@ -6,7 +6,7 @@ import { isPendingTodo, linkLabel, linkParts } from './todos'
 const todo = (id: number, doneAt: number | null = null): Todo => ({ id, text: `T${id}`, doneAt })
 const ids = (todos: Todo[]) => todos.map((item) => item.id)
 
-describe('to-dos waiting for the server', () => {
+describe('to-dos waiting for the local store', () => {
   it('shows a new to-do at once, marked as not stored yet', () => {
     const list = applyTodoOp([todo(1), todo(2, 50)], { type: 'add', tempId: -1, text: 'new' })
     expect(list[0]).toEqual({ id: -1, text: 'new', doneAt: null })
@@ -14,7 +14,7 @@ describe('to-dos waiting for the server', () => {
   })
 
   it('keeps a to-do that is still being stored on top while the others are arranged', () => {
-    // The request can only name stored to-dos, and the server leaves the new one above them
+    // The request can only name stored to-dos, and the local store leaves the new one above them
     expect(ids(applyTodoOp([todo(-1), todo(1), todo(2), todo(3, 50)], { type: 'reorder', ids: [2, 1] }))).toEqual([-1, 2, 1, 3])
   })
 

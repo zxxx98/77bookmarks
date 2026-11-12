@@ -177,7 +177,7 @@ export function TodoPanel({ list, open, onToggle, focusSignal, openInNewTab }: P
 }
 
 function OpenTodo({ todo, list, openInNewTab }: { todo: Todo; list: Todos; openInNewTab: boolean }) {
-  // Nothing can be done to a to-do before the server has given it an id
+  // Nothing can be done to a to-do before the local store has given it an id
   const pending = isPendingTodo(todo)
   const [editing, setEditing] = useState(false)
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id: todo.id, disabled: pending || editing })

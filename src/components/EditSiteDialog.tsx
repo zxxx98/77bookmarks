@@ -78,7 +78,7 @@ function Editor({ site, desktop, desktops }: { site: Site; desktop: Desktop; des
     const url = parseIconUrl(iconUrl)
     if (!url) return toast('无效的图片地址', 'error')
     setIconBusy(true)
-    // Checked here rather than on the server: the browser is what will load it, and it may reach addresses the server can't
+    // Validate the address in the browser, including local-network image URLs.
     if (await canLoadImage(url)) {
       if (await act(() => api.setIcon(site.id, { url }), '图标已更新')) setIconUrl(url)
     } else {

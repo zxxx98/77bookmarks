@@ -140,7 +140,7 @@ export function AddBookmarkDialog({ open, initialUrl = '', onClose, desktop }: {
           ))}
 
         <div className="mt-5 flex items-center justify-end gap-2">
-          {busy && <span className="mr-auto text-xs text-muted">正在获取标题和图标…</span>}
+          {busy && <span className="mr-auto text-xs text-muted">正在保存到本地…</span>}
           <button type="button" className="btn btn-soft" onClick={onClose}>
             取消
           </button>
