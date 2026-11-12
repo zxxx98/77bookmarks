@@ -9,10 +9,12 @@ export interface SystemSettings {
   siteName: string
   openInNewTab: boolean
   layoutColumns: LayoutColumns
+  autoSortByUsage: boolean
 }
 
 export const DEFAULT_SETTINGS: SystemSettings = {
   siteName: DEFAULT_SITE_NAME,
   openInNewTab: true,
   layoutColumns: 1,
+  autoSortByUsage: false,
 }

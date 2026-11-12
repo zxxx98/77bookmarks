@@ -170,6 +170,7 @@ export function parseSnapshot(input: unknown): SyncSnapshot | null {
   const settings = input.settings.value
   const siteName = text(settings.siteName, MAX_SITE_NAME_LENGTH)
   if (!siteName || typeof settings.openInNewTab !== 'boolean' || !isLayoutColumns(settings.layoutColumns)) return null
+  if (settings.autoSortByUsage !== undefined && typeof settings.autoSortByUsage !== 'boolean') return null
   if (typeof input.since !== 'number' || !Number.isSafeInteger(input.since) || input.since < 0) return null
 
   const desktops: SyncDesktop[] = []
@@ -251,7 +252,7 @@ export function parseSnapshot(input: unknown): SyncSnapshot | null {
     updatedAt: stamp(input.updatedAt),
     since: input.since,
     settings: {
-      value: { siteName, openInNewTab: settings.openInNewTab, layoutColumns: settings.layoutColumns },
+      value: { siteName, openInNewTab: settings.openInNewTab, layoutColumns: settings.layoutColumns, autoSortByUsage: settings.autoSortByUsage === true },
       updatedAt: stamp(input.settings.updatedAt),
     },
     desktops, groups, sites, links, todos,

@@ -161,6 +161,7 @@ function parseBackupContents(input: unknown, legacyName: string): ParsedBackup |
     if (!isObject(data) || !isObject(data.settings) || !Array.isArray(data.todos)) return { error: '完整备份中的设置或待办格式有误' }
     const settings = data.settings
     if (typeof settings.siteName !== 'string' || !settings.siteName.trim() || settings.siteName.length > MAX_SITE_NAME_LENGTH || typeof settings.openInNewTab !== 'boolean' || !isLayoutColumns(settings.layoutColumns)) return { error: '完整备份中的设置格式有误' }
+    if (settings.autoSortByUsage !== undefined && typeof settings.autoSortByUsage !== 'boolean') return { error: '完整备份中的设置格式有误' }
     if (typeof data.since !== 'number' || !Number.isSafeInteger(data.since) || data.since < 0) return { error: '完整备份中的统计开始时间有误' }
     const todos: FullBackupLocal['todos'] = []
     for (const todo of data.todos) {
@@ -169,7 +170,7 @@ function parseBackupContents(input: unknown, legacyName: string): ParsedBackup |
     }
     const preferences: Record<string, string> = {}
     if (isObject(data.preferences)) for (const key of ['theme', 'style', 'search_engine', 'todo-panel']) { const value = data.preferences[key]; if (typeof value === 'string' && value.length <= 100) preferences[key] = value }
-    local = { preferences, settings: { siteName: settings.siteName.trim(), openInNewTab: settings.openInNewTab, layoutColumns: settings.layoutColumns }, since: data.since, todos }
+    local = { preferences, settings: { siteName: settings.siteName.trim(), openInNewTab: settings.openInNewTab, layoutColumns: settings.layoutColumns, autoSortByUsage: settings.autoSortByUsage === true }, since: data.since, todos }
     const seen = new Set<string>()
     const records: BackupMetadata[] = [...todos]
     for (const d of desktops) { records.push(d); for (const g of d.groups) { records.push(g); for (const s of g.sites) records.push(s, ...s.links) } }

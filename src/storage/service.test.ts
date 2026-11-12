@@ -105,6 +105,78 @@ describe('desktops, groups, sorting and cascading deletion', () => {
   })
 })
 
+describe('automatic usage sorting', () => {
+  it('defaults to off for both new and existing installations', async () => {
+    expect((await service.settings()).autoSortByUsage).toBe(false)
+    const legacy = { siteName: '旧设置', openInNewTab: false, layoutColumns: 2 as const }
+    await db.put('settings', { key: 'system', value: legacy as typeof DEFAULT_SETTINGS })
+    expect(await service.settings()).toEqual({ ...legacy, autoSortByUsage: false })
+  })
+
+  it('sorts by combined homepage and link clicks within each group without moving groups or desktops', async () => {
+    const first = (await service.board()).desktop
+    await service.createGroup(first.id, '置顶组')
+    const pinned = (await service.board()).desktop.groups[1]
+    await service.pinGroup(pinned.id, true)
+    const second = await service.createDesktop('另一个桌面')
+    const a = await service.addBookmark('https://a.example.com', first.id, first.groups[0].id)
+    const b = await service.addBookmark('https://b.example.com/docs', first.id, first.groups[0].id)
+    const c = await service.addBookmark('https://c.example.com', first.id, pinned.id)
+    const d = await service.addBookmark('https://d.example.com', first.id, pinned.id)
+    const e = await service.addBookmark('https://e.example.com', second.id)
+    const f = await service.addBookmark('https://f.example.com', second.id)
+    const link = (await boardSites()).find((s) => s.id === b.siteId)!.links[0]
+    await service.recordClick({ siteId: a.siteId })
+    await service.recordClick({ siteId: b.siteId })
+    await service.recordClick({ linkId: link.id })
+    await service.recordClick({ siteId: d.siteId })
+    await service.recordClick({ siteId: f.siteId })
+    const before = await service.board()
+    expect(before.desktop.groups.map((g) => g.sites.map((s) => s.id))).toEqual([[c.siteId, d.siteId], [a.siteId, b.siteId]])
+
+    await service.updateSettings({ ...DEFAULT_SETTINGS, autoSortByUsage: true })
+    const after = await service.board()
+    expect(after.desktops).toEqual(before.desktops)
+    expect(after.desktop.groups.map((g) => [g.id, g.pinned])).toEqual(before.desktop.groups.map((g) => [g.id, g.pinned]))
+    expect(after.desktop.groups.map((g) => g.sites.map((s) => s.id))).toEqual([[d.siteId, c.siteId], [b.siteId, a.siteId]])
+    expect((await service.board(second.id)).desktop.groups[0].sites.map((s) => s.id)).toEqual([f.siteId, e.siteId])
+  })
+
+  it('keeps ties stable, updates after clicks, and retains the latest order when disabled and reopened', async () => {
+    const a = await service.addBookmark('https://a.example.com')
+    const b = await service.addBookmark('https://b.example.com/docs')
+    const link = (await boardSites()).find((s) => s.id === b.siteId)!.links[0]
+    await service.updateSettings({ ...DEFAULT_SETTINGS, autoSortByUsage: true })
+    expect((await boardSites()).map((s) => s.id)).toEqual([a.siteId, b.siteId])
+    await service.recordClick({ linkId: link.id })
+    expect((await boardSites()).map((s) => s.id)).toEqual([b.siteId, a.siteId])
+    await service.recordClick({ siteId: a.siteId })
+    expect((await boardSites()).map((s) => s.id)).toEqual([b.siteId, a.siteId])
+    await service.updateSettings(DEFAULT_SETTINGS)
+    await service.recordClick({ siteId: a.siteId })
+    expect((await boardSites()).map((s) => s.id)).toEqual([b.siteId, a.siteId])
+    const reopened = await openLocalDatabase(name)
+    try {
+      const other = new LocalService(async () => reopened)
+      expect((await other.settings()).autoSortByUsage).toBe(false)
+      expect((await other.board()).desktop.groups[0].sites.map((s) => s.id)).toEqual([b.siteId, a.siteId])
+    } finally { reopened.close() }
+    await service.updateSettings({ ...DEFAULT_SETTINGS, autoSortByUsage: true })
+    expect((await boardSites()).map((s) => s.id)).toEqual([a.siteId, b.siteId])
+  })
+
+  it('preserves the setting in full backups and defaults older backups to off', async () => {
+    await service.updateSettings({ ...DEFAULT_SETTINGS, autoSortByUsage: true })
+    const backup = JSON.parse((await service.exportBackup()).json)
+    await service.updateSettings(DEFAULT_SETTINGS)
+    await service.importBackup(backup, 'replace')
+    expect((await service.settings()).autoSortByUsage).toBe(true)
+    delete backup.local.settings.autoSortByUsage
+    await service.importBackup(backup, 'replace')
+    expect((await service.settings()).autoSortByUsage).toBe(false)
+  })
+})
+
 describe('to-dos and local icons', () => {
   it('orders, completes, restores, edits and clears to-dos without reusing deleted identifiers', async () => {
     const a = await service.addTodo('A')

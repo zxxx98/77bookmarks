@@ -188,6 +188,14 @@ describe('repairing the merged board', () => {
 })
 
 describe('reading a snapshot from the network', () => {
+  it('defaults legacy snapshots to manual sorting and rejects an invalid sorting flag', () => {
+    const input = JSON.parse(JSON.stringify(snapshot()))
+    delete input.settings.value.autoSortByUsage
+    expect(parseSnapshot(input)?.settings.value.autoSortByUsage).toBe(false)
+    input.settings.value.autoSortByUsage = 'true'
+    expect(parseSnapshot(input)).toBeNull()
+  })
+
   it('rejects anything that is not a snapshot of this format', () => {
     expect(parseSnapshot(null)).toBeNull()
     expect(parseSnapshot({ format: 'other', version: 1 })).toBeNull()

@@ -43,6 +43,7 @@ function Content({ settings, importBusy, onBusyChange, ...backupProps }: Omit<Pr
   const [name, setName] = useState(settings.siteName)
   const [openInNewTab, setOpenInNewTab] = useState(settings.openInNewTab)
   const [layoutColumns, setLayoutColumns] = useState(settings.layoutColumns)
+  const [autoSortByUsage, setAutoSortByUsage] = useState(settings.autoSortByUsage)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -52,11 +53,12 @@ function Content({ settings, importBusy, onBusyChange, ...backupProps }: Omit<Pr
     setSaving(true)
     setError('')
     try {
-      const settings = await api.updateSettings({ siteName: name.trim(), openInNewTab, layoutColumns })
+      const settings = await api.updateSettings({ siteName: name.trim(), openInNewTab, layoutColumns, autoSortByUsage })
       queryClient.setQueryData<SystemSettings>(['settings'], settings)
       setName(settings.siteName)
       setOpenInNewTab(settings.openInNewTab)
       setLayoutColumns(settings.layoutColumns)
+      setAutoSortByUsage(settings.autoSortByUsage)
       toast('设置已保存')
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存失败，请重试')
@@ -65,7 +67,7 @@ function Content({ settings, importBusy, onBusyChange, ...backupProps }: Omit<Pr
     }
   }
 
-  const unchanged = name.trim() === settings.siteName && openInNewTab === settings.openInNewTab && layoutColumns === settings.layoutColumns
+  const unchanged = name.trim() === settings.siteName && openInNewTab === settings.openInNewTab && layoutColumns === settings.layoutColumns && autoSortByUsage === settings.autoSortByUsage
 
   return (
     <>
@@ -125,6 +127,21 @@ function Content({ settings, importBusy, onBusyChange, ...backupProps }: Omit<Pr
             在新标签页打开
           </label>
           <p id="open-in-new-tab-hint" className="mt-1.5 text-xs text-faint">适用于书签、子链接和搜索结果，取消勾选后在当前标签页打开。</p>
+          <label className="mt-5 flex cursor-pointer items-center gap-2.5 text-sm">
+            <input
+              type="checkbox"
+              className="size-4 shrink-0 accent-accent-solid"
+              checked={autoSortByUsage}
+              disabled={saving}
+              onChange={(event) => {
+                setAutoSortByUsage(event.target.checked)
+                setError('')
+              }}
+              aria-describedby="auto-sort-by-usage-hint"
+            />
+            通过使用统计自动排序
+          </label>
+          <p id="auto-sort-by-usage-hint" className="mt-1.5 text-xs text-faint">仅在各分组内按书签及其子链接的总点击次数从多到少排序，次数相同时保留原顺序。关闭后保留当前顺序，停止自动排序。</p>
           {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
           <div className="mt-5 flex justify-end">
             <button className="btn btn-primary" disabled={saving || !name.trim() || unchanged}>

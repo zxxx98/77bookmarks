@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto'
 import { deleteDB } from 'idb'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { SyncSnapshot } from '../../shared/sync'
+import { DEFAULT_SETTINGS } from '../../shared/settings'
 import { openLocalDatabase, type LocalDatabase } from '../storage/db'
 import { LocalService } from '../storage/service'
 import { SyncEngine } from './engine'
@@ -63,6 +64,35 @@ afterEach(async () => {
 const sites = async (service: LocalService) => (await service.board()).desktop.groups.flatMap((group) => group.sites)
 
 describe('syncing a board between two devices', () => {
+  it('sorts merged click counts and keeps the resulting order after disabling on another device', async () => {
+    const a = await device()
+    await a.service.addBookmark('https://a.example.com')
+    await a.service.addBookmark('https://b.example.com/docs')
+    await a.service.updateSettings({ ...DEFAULT_SETTINGS, autoSortByUsage: true })
+    await a.engine.run()
+    const b = await device()
+    await b.engine.run()
+    const card = (await sites(b.service))[1]
+    await b.service.recordClick({ linkId: card.links[0].id })
+    await b.engine.run()
+    await a.engine.run()
+    expect((await sites(a.service)).map((s) => s.origin)).toEqual(['https://b.example.com', 'https://a.example.com'])
+    await a.service.updateSettings(DEFAULT_SETTINGS)
+    await a.engine.run()
+    await b.engine.run()
+    expect((await b.service.settings()).autoSortByUsage).toBe(false)
+    const other = (await sites(b.service))[1]
+    await b.service.recordClick({ siteId: other.id })
+    await b.service.recordClick({ siteId: other.id })
+    await b.engine.run()
+    await a.engine.run()
+    expect((await sites(a.service)).map((s) => s.origin)).toEqual(['https://b.example.com', 'https://a.example.com'])
+    const version = cloud.version
+    await b.engine.run()
+    await a.engine.run()
+    expect(cloud.version).toBe(version)
+  })
+
   it('merges a fresh install into the existing cloud board instead of duplicating it', async () => {
     const a = await device()
     await a.service.addBookmark('https://example.com/docs', 0, undefined, '文档')
@@ -138,12 +168,13 @@ describe('syncing a board between two devices', () => {
     const added = await a.service.addBookmark('https://icons.example.com')
     await a.service.setIcon(added.siteId, { dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=' })
     await a.service.addTodo('共享待办')
-    await a.service.updateSettings({ siteName: '共享名称', openInNewTab: false, layoutColumns: 2 })
+    await a.service.updateSettings({ siteName: '共享名称', openInNewTab: false, layoutColumns: 2, autoSortByUsage: true })
     await a.engine.run()
 
     const b = await device()
     await b.engine.run()
     expect((await b.service.settings()).siteName).toBe('共享名称')
+    expect((await b.service.settings()).autoSortByUsage).toBe(true)
     expect((await b.service.todos()).map((todo) => todo.text)).toEqual(['共享待办'])
     expect(await b.service.icon((await sites(b.service))[0].id)).toBeNull()
     const uploaded = JSON.stringify(cloud.snapshot)

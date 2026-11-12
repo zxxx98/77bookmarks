@@ -43,6 +43,7 @@ export class LocalService {
     const settled = tx.done.catch(() => undefined)
     try {
       const result = await run(tx)
+      await this.sortSitesByUsage(tx)
       await tx.done
       return result
     } catch (error) {
@@ -64,6 +65,27 @@ export class LocalService {
       try { tx.abort() } catch { /* Already aborted. */ }
       await settled
       throw error
+    }
+  }
+  /** Updates the existing positions, so turning this off simply keeps the latest order. */
+  private async sortSitesByUsage(tx: Pick<WriteTransaction, 'objectStore'>) {
+    const settings = (await tx.objectStore('settings').get('system'))?.value as SystemSettings | undefined
+    if (!settings?.autoSortByUsage) return
+    const [sites, links] = await Promise.all([tx.objectStore('sites').getAll(), tx.objectStore('links').getAll()])
+    const clicks = new Map(sites.map((s) => [s.id, s.clicks]))
+    for (const link of links) clicks.set(link.siteId, (clicks.get(link.siteId) ?? 0) + link.clicks)
+    const groups = new Map<number, SiteRow[]>()
+    for (const site of sorted(sites)) {
+      const group = groups.get(site.groupId) ?? []
+      group.push(site)
+      groups.set(site.groupId, group)
+    }
+    for (const group of groups.values()) {
+      const ordered = [...group].sort((a, b) => clicks.get(b.id)! - clicks.get(a.id)!)
+      if (ordered.every((s, index) => s.id === group[index].id)) continue
+      for (const [position, site] of ordered.entries()) {
+        if (site.position !== position) await tx.objectStore('sites').put(changed(site, { position }))
+      }
     }
   }
   private async syncRecords() {
@@ -130,12 +152,12 @@ export class LocalService {
     return [...counts].map(([desktopId, count]) => ({ desktopId, count }))
   }
   async settings(): Promise<SystemSettings> {
-    return (await (await this.db()).get('settings', 'system'))?.value as SystemSettings ?? DEFAULT_SETTINGS
+    return { ...DEFAULT_SETTINGS, ...((await (await this.db()).get('settings', 'system'))?.value as SystemSettings | undefined) }
   }
-  async updateSettings(settings: SystemSettings) {
+  async updateSettings(settings: Omit<SystemSettings, 'autoSortByUsage'> & { autoSortByUsage?: boolean }) {
     const siteName = nameOf(settings.siteName, MAX_SITE_NAME_LENGTH)
-    if (typeof settings.openInNewTab !== 'boolean' || !isLayoutColumns(settings.layoutColumns)) throw new Error('无效的设置')
-    const value = { siteName, openInNewTab: settings.openInNewTab, layoutColumns: settings.layoutColumns }
+    if (typeof settings.openInNewTab !== 'boolean' || !isLayoutColumns(settings.layoutColumns) || (settings.autoSortByUsage !== undefined && typeof settings.autoSortByUsage !== 'boolean')) throw new Error('无效的设置')
+    const value = { siteName, openInNewTab: settings.openInNewTab, layoutColumns: settings.layoutColumns, autoSortByUsage: settings.autoSortByUsage ?? false }
     await this.write(async (tx) => {
       // Settings carry their own modification time so that the newer side wins when syncing
       const previous = await tx.objectStore('settings').get('system')
@@ -351,6 +373,7 @@ export class LocalService {
         const row = await tx.objectStore('sites').get(target.siteId)
         if (row) await tx.objectStore('sites').put(clicked(row))
       }
+      await this.sortSitesByUsage(tx)
       return ok
     })
   }
@@ -416,7 +439,7 @@ export class LocalService {
         const match = dataUrl && /^data:([^;]+);base64,(.*)$/.exec(dataUrl)
         return { origin: s.origin, title: s.title, ...metadata(s), ...(s.iconUrl ? { iconUrl: s.iconUrl } : {}), ...(match ? { icon: { type: match[1], data: match[2] } } : {}), links: sorted(links).filter((l) => l.siteId === s.id).map((l) => ({ path: l.path, title: l.title, ...metadata(l) })) }
       }) })) })),
-      ...(full ? { local: { settings: settings.find((s) => s.key === 'system')?.value ?? DEFAULT_SETTINGS, since: settings.find((s) => s.key === 'since')?.value ?? Date.now(), todos: sorted(todos).map((t) => ({ text: t.text, doneAt: t.doneAt, ...metadata(t) })) } } : {}),
+      ...(full ? { local: { settings: { ...DEFAULT_SETTINGS, ...(settings.find((s) => s.key === 'system')?.value as SystemSettings | undefined) }, since: settings.find((s) => s.key === 'since')?.value ?? Date.now(), todos: sorted(todos).map((t) => ({ text: t.text, doneAt: t.doneAt, ...metadata(t) })) } } : {}),
     }
     return { json: JSON.stringify(backup, null, 2), filename: `77bookmarks-${full ? 'full-' : ''}${new Date().toISOString().slice(0, 10)}.json` }
   }
@@ -529,6 +552,7 @@ export class LocalService {
       if (pristine) local = { ...remote, deviceId }
       const { snapshot, stats } = mergeSnapshots(pristine ? remote : remote ? base : null, local, remote ?? local)
       await applySnapshot(tx, snapshot)
+      await this.sortSitesByUsage(tx)
       await store.put({ key: 'base', snapshot: remote })
       // Rebuilt from the records that were actually written, so the upload matches the database
       return { snapshot: snapshotOf(await read(), deviceId), stats }

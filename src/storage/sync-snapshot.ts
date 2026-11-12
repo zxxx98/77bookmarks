@@ -38,7 +38,7 @@ export function snapshotOf(rows: LocalRows, deviceId: string): SyncSnapshot {
     deviceId,
     updatedAt: Date.now(),
     since: typeof since === 'number' ? since : Date.now(),
-    settings: { value: (system?.value as SystemSettings | undefined) ?? DEFAULT_SETTINGS, updatedAt: system?.updatedAt ?? SEEDED_AT },
+    settings: { value: { ...DEFAULT_SETTINGS, ...(system?.value as SystemSettings | undefined) }, updatedAt: system?.updatedAt ?? SEEDED_AT },
     desktops: sorted(rows.desktops).map((row) => ({ ...meta(row), name: row.name, view: row.view })),
     groups: sorted(rows.groups)
       .filter((row) => desktopSync.has(row.desktopId))
