@@ -112,3 +112,12 @@ export interface AccessTokenStatus {
   createdAt: number
   lastUsedAt: number | null
 }
+
+export const MAX_TODO_LENGTH = 200
+
+export interface Todo {
+  id: number
+  text: string
+  /** null while open, otherwise when it was ticked off */
+  doneAt: number | null
+}

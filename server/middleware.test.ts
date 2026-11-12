@@ -48,6 +48,9 @@ describe('access token requests', () => {
     ['POST', '/api/token'],
     ['DELETE', '/api/token'],
     ['GET', '/api/usage'],
+    ['GET', '/api/todos'],
+    ['POST', '/api/todos'],
+    ['DELETE', '/api/todos/done'],
     ['GET', '/api/bookmarks'],
     ['POST', '/api/board'],
   ])('does not let a token %s %s', async (method, path) => {

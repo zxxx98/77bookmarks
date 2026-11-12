@@ -1,4 +1,4 @@
-import type { AccessTokenStatus, AddResult, BoardPage, DesktopMatch, ImportMode, ImportResult, OrderInput, UsageStats, View } from '../shared/types'
+import type { AccessTokenStatus, AddResult, BoardPage, DesktopMatch, ImportMode, ImportResult, OrderInput, Todo, UsageStats, View } from '../shared/types'
 import type { SystemSettings } from '../shared/settings'
 import { rememberSettings } from './settings'
 import type { ChromeImportRow } from './chrome-import'
@@ -40,6 +40,14 @@ export const api = {
   updateSettings: (settings: SystemSettings) => request<SystemSettings>('/settings', 'PUT', settings).then(rememberSettings),
   addBookmark: (url: string, desktopId: number, groupId?: number) => request<AddResult>('/bookmarks', 'POST', { url, desktopId, groupId }),
   order: (order: OrderInput) => request('/order', 'PUT', order),
+
+  /** Open to-dos from top to bottom, then the finished ones */
+  todos: () => request<Todo[]>('/todos'),
+  addTodo: (text: string) => request<Todo>('/todos', 'POST', { text }),
+  updateTodo: (id: number, patch: { text?: string; done?: boolean }) => request(`/todos/${id}`, 'PATCH', patch),
+  deleteTodo: (id: number) => request(`/todos/${id}`, 'DELETE'),
+  clearDoneTodos: () => request('/todos/done', 'DELETE'),
+  orderTodos: (ids: number[]) => request('/todos/order', 'PUT', { ids }),
 
   /** State of the access token used by the browser extension */
   tokenStatus: () => request<AccessTokenStatus | null>('/token'),

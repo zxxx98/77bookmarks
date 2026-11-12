@@ -1,4 +1,4 @@
-import { ChartNoAxesColumn, Check, ChevronDown, CornerDownLeft, Ellipsis, FoldVertical, LockKeyhole, LogOut, Monitor, Moon, Palette, Pencil, Plus, Settings, Sun, UnfoldVertical, X } from 'lucide-react'
+import { ChartNoAxesColumn, Check, ChevronDown, CornerDownLeft, Ellipsis, FoldVertical, ListTodo, LockKeyhole, LogOut, Monitor, Moon, Palette, Pencil, Plus, Settings, Sun, UnfoldVertical, X } from 'lucide-react'
 import type { RefObject } from 'react'
 import type { Desktop, DesktopSummary, View } from '../../shared/types'
 import { SEARCH_ENGINES, SearchEngineIcon, useSearchEngine, type SearchEngineId } from '../engines'
@@ -54,6 +54,10 @@ interface Props {
   onAdd: () => void
   onSettings: () => void
   onUsage: () => void
+  todoOpen: boolean
+  /** Open to-dos, once the list has loaded */
+  todoCount?: number
+  onToggleTodos: () => void
   onLock: () => void
   onLogout: () => void
 }
@@ -77,6 +81,9 @@ export function TopBar({
   onAdd,
   onSettings,
   onUsage,
+  todoOpen,
+  todoCount,
+  onToggleTodos,
   onLock,
   onLogout,
 }: Props) {
@@ -163,6 +170,21 @@ export function TopBar({
             {allCollapsed ? <UnfoldVertical size={16} /> : <FoldVertical size={16} />}
           </button>
         )}
+        {/* Narrower screens fold the to-dos with the title above the bookmarks instead */}
+        <button
+          className={`icon-btn relative max-lg:hidden ${todoOpen ? '!bg-accent-soft !text-accent' : ''}`}
+          title={todoOpen ? '收起待办（Alt+T 添加待办）' : '展开待办（Alt+T 添加待办）'}
+          aria-label={todoOpen ? '收起待办' : todoCount ? `展开待办，${todoCount} 项未完成` : '展开待办'}
+          aria-pressed={todoOpen}
+          onClick={onToggleTodos}
+        >
+          <ListTodo size={17} />
+          {!todoOpen && !!todoCount && (
+            <span className="absolute -top-0.5 -right-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-accent-solid px-1 font-mono text-[10px] leading-none font-semibold text-accent-fg tabular-nums">
+              {todoCount > 99 ? '99+' : todoCount}
+            </span>
+          )}
+        </button>
         <ThemeMenu theme={theme} onTheme={setTheme} styleId={styleId} activePreset={activePreset} onStyle={setStyleId} className="max-md:hidden" />
         <button
           className={`icon-btn ${editing ? '!bg-accent-soft !text-accent' : ''}`}

@@ -121,9 +121,19 @@ const GROUP_LAYOUT: Record<LayoutColumns, string> = {
   4: 'grid grid-cols-1 gap-x-6 gap-y-9 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4',
 }
 
+/** From lg up a side panel stands where the last column would be, which leaves the groups one column fewer */
+const GROUP_LAYOUT_BESIDE_PANEL: Record<LayoutColumns, string> = {
+  1: GROUP_LAYOUT[1],
+  2: GROUP_LAYOUT[2],
+  3: 'grid grid-cols-1 gap-x-6 gap-y-9 md:grid-cols-2 xl:grid-cols-3',
+  4: 'grid grid-cols-1 gap-x-6 gap-y-9 md:grid-cols-2 xl:grid-cols-3',
+}
+
 interface Props {
   openInNewTab: boolean
   layoutColumns: LayoutColumns
+  /** A side panel is open next to the board */
+  besidePanel?: boolean
   desktop: Desktop
   /** The desktop's groups, narrowed down while searching */
   groups: Group[]
@@ -137,7 +147,7 @@ interface Props {
   onStartEditing?: () => void
 }
 
-export function BoardView({ desktop, groups, editing, sortable, matchedLinks, collapsedGroupIds, onToggleGroupCollapse, onEditSite, onStartEditing, openInNewTab, layoutColumns }: Props) {
+export function BoardView({ desktop, groups, editing, sortable, matchedLinks, collapsedGroupIds, onToggleGroupCollapse, onEditSite, onStartEditing, openInNewTab, layoutColumns, besidePanel }: Props) {
   const queryClient = useQueryClient()
   const act = useAct()
   const { toast, confirm } = useUi()
@@ -332,7 +342,7 @@ export function BoardView({ desktop, groups, editing, sortable, matchedLinks, co
       }}
     >
       <SortableContext items={view.map((g) => `g-${g.id}`)} strategy={layoutColumns === 1 ? verticalListSortingStrategy : rectSortingStrategy}>
-        <div className={GROUP_LAYOUT[layoutColumns]}>
+        <div className={(besidePanel ? GROUP_LAYOUT_BESIDE_PANEL : GROUP_LAYOUT)[layoutColumns]}>
           {view.map((group) => (
             <GroupSection
               openInNewTab={openInNewTab}
@@ -411,7 +421,7 @@ function GroupSection({
   onDeleteSite,
   onContextMenu,
   dragJustEndedRef,
-}: Omit<Props, 'groups' | 'desktop' | 'layoutColumns' | 'collapsedGroupIds' | 'onToggleGroupCollapse'> & {
+}: Omit<Props, 'groups' | 'desktop' | 'layoutColumns' | 'besidePanel' | 'collapsedGroupIds' | 'onToggleGroupCollapse'> & {
   group: Group
   view: View
   collapsed: boolean

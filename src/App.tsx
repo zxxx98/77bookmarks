@@ -13,22 +13,33 @@ import { BoardView } from './components/BoardView'
 import { EditSiteDialog } from './components/EditSiteDialog'
 import { LoginPage } from './components/LoginPage'
 import { SettingsDialog } from './components/SettingsDialog'
+import { TodoPanel } from './components/TodoPanel'
 import { TopBar } from './components/TopBar'
 import { UsageDialog } from './components/UsageDialog'
 import { SEARCH_ENGINES, SearchEngineIcon, useSearchEngine } from './engines'
 import { useLazyIcons } from './lazy-icons'
 import { searchBoard } from './search'
 import { readSettings } from './settings'
+import { TODOS_KEY, useTodos } from './todos'
 import { UiProvider, useUi } from './ui'
 
 const DESKTOP_KEY = 'desktop'
 const SWIPE_DISTANCE = 70
 const LOCK_KEY = 'bookmarks-lock'
+const TODO_PANEL_KEY = 'todo-panel'
+// Screen width from which the to-do panel stands beside the bookmarks instead of above them
+const PANEL_BESIDE = '(min-width: 1024px)'
 type LockMode = 'locked' | 'signed-out'
 
 function storedLockMode(): LockMode | null {
   const value = localStorage.getItem(LOCK_KEY)
   return value === 'locked' || value === 'signed-out' ? value : null
+}
+
+/** Until the user folds or unfolds it: open where it fits beside the bookmarks, folded where it would push them down */
+function storedTodoOpen(): boolean {
+  const value = localStorage.getItem(TODO_PANEL_KEY)
+  return value === 'open' || value === 'closed' ? value === 'open' : window.matchMedia(PANEL_BESIDE).matches
 }
 
 function canUseGlobalShortcut(event: KeyboardEvent | ClipboardEvent) {
@@ -63,6 +74,11 @@ export default function App() {
     void queryClient.cancelQueries({ queryKey: ['board-search'] })
     queryClient.removeQueries({ queryKey: ['board'] })
     queryClient.removeQueries({ queryKey: ['board-search'] })
+    // Everything else that was read with the session goes with it
+    for (const queryKey of [TODOS_KEY, ['usage'], ['token']]) {
+      void queryClient.cancelQueries({ queryKey })
+      queryClient.removeQueries({ queryKey })
+    }
   }, [queryClient])
 
   useEffect(() => {
@@ -190,6 +206,16 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
   const [addingUrl, setAddingUrl] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [usageOpen, setUsageOpen] = useState(false)
+  const todos = useTodos()
+  // Remembered per browser, like the desktop shown
+  const [todoOpen, setTodoOpen] = useState(storedTodoOpen)
+  const [todoFocus, setTodoFocus] = useState(0)
+  const showTodos = useCallback((open: boolean) => {
+    setTodoOpen(open)
+    try {
+      localStorage.setItem(TODO_PANEL_KEY, open ? 'open' : 'closed')
+    } catch { /* The panel still folds, it just isn't remembered. */ }
+  }, [])
   const [editingSiteId, setEditingSiteId] = useState<number | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
@@ -321,6 +347,13 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
         return
       }
 
+      if (event.altKey && (event.key.toLowerCase() === 't' || event.code === 'KeyT')) {
+        event.preventDefault()
+        showTodos(true)
+        setTodoFocus((count) => count + 1)
+        return
+      }
+
       if (event.altKey) return
 
       if (editing && (event.key === 'Enter' || event.key === 'Escape')) {
@@ -354,7 +387,7 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('paste', onPaste)
     }
-  }, [desktops.length, editing, stepDesktop, loading, toggleCollapseAll])
+  }, [desktops.length, editing, stepDesktop, loading, toggleCollapseAll, showTodos])
 
   // A horizontal swipe switches desktops on touch screens. Off in edit mode, where touches drag cards
   const touchStart = useRef<{ x: number; y: number } | null>(null)
@@ -416,10 +449,20 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
         onAdd={() => !loading && setAddingUrl('')}
         onSettings={() => setSettingsOpen(true)}
         onUsage={() => setUsageOpen(true)}
+        todoOpen={todoOpen}
+        todoCount={todos.todos?.filter((todo) => todo.doneAt === null).length}
+        onToggleTodos={() => showTodos(!todoOpen)}
         onLock={onLock}
         onLogout={onLogout}
       />
-      <main className="mx-auto max-w-7xl overflow-x-clip px-4 pt-8 pb-24 sm:px-6" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      <main className="mx-auto flex max-w-7xl flex-col gap-9 overflow-x-clip px-4 pt-8 pb-24 sm:px-6 lg:flex-row lg:items-start lg:gap-6">
+        {/* Takes the place of the last column of groups on wide screens and stays put while they scroll.
+            On narrow ones it sits above the bookmarks, where folding leaves only its title. */}
+        <aside className={`relative z-10 lg:sticky lg:top-22 lg:order-last lg:w-[290px] lg:shrink-0 ${todoOpen ? '' : 'lg:hidden'}`}>
+          <TodoPanel list={todos} open={todoOpen} onToggle={() => showTodos(!todoOpen)} focusSignal={todoFocus} openInNewTab={openInNewTab} />
+        </aside>
+        {/* Swiping here switches desktops; the to-do panel keeps its own touches */}
+        <div className="min-w-0 flex-1" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
         <motion.div
           key={desktop.id}
           initial={slide === 0 ? false : { opacity: 0, x: slide * 36 }}
@@ -481,6 +524,7 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
             <BoardView
               openInNewTab={openInNewTab}
               layoutColumns={layoutColumns}
+              besidePanel={todoOpen}
               desktop={desktop}
               groups={result.groups}
               editing={editing}
@@ -509,6 +553,7 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
             </div>
           )}
         </motion.div>
+        </div>
       </main>
       <AddBookmarkDialog open={addingUrl !== null} initialUrl={addingUrl ?? ''} onClose={() => setAddingUrl(null)} desktop={desktop} />
       <EditSiteDialog site={editingSite} desktop={desktop} desktops={desktops} onClose={() => setEditingSiteId(null)} />
