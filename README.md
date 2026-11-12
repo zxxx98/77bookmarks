@@ -1,10 +1,44 @@
 # 77 Bookmarks
 
-Chrome / Edge 本地新标签页扩展。安装后，新标签页就是卡片式书签桌面，数据保存在当前浏览器中。
+Chrome / Edge 本地新标签页扩展，也支持 Docker 自部署与配套的精简右键添加插件。两版共用同一套界面与数据服务。
 
 支持多桌面、分组置顶、拖动排序、大卡片 / 小卡片 / 列表、跨桌面搜索、四种视觉风格、明暗主题、待办和点击统计。添加网址时，域名成为卡片，子路径成为卡片上的链接，同一桌面里的相同网站自动合并。
 
-## 构建与安装
+## Docker 自部署（可选）
+
+适合多设备共用同一份书签、不替换浏览器新标签页的场景。数据存储在容器 `/data` 卷内的 SQLite 文件中，通过单用户密码登录；与扩展版使用相同的备份格式，可直接互相导入。
+
+```bash
+ADMIN_PASSWORD='your-strong-password' docker compose up -d --build
+```
+
+默认监听 `8080` 端口（可通过 `PORT=9000` 修改）。环境变量：
+
+| 变量 | 说明 | 默认值 |
+|---|---|---|
+| `ADMIN_PASSWORD` | 登录密码，至少 8 个字符（必填） | 无 |
+| `PORT` | 宿主机映射端口（compose）或容器内监听端口 | `8080` |
+| `TRUST_PROXY` | 置于 HTTPS 反向代理后时设为 `true`，以识别 `X-Forwarded-*` | `false` |
+
+外网访问建议挂在 HTTPS 反向代理（Nginx / Caddy / Traefik）后面；如果在反代层缓冲响应，建议对 `/api/events` 关闭缓冲以保证多标签实时刷新。
+
+### 配套右键添加插件
+
+自部署版不接管新标签页，可单独安装只有右键添加功能的精简插件：
+
+```bash
+npm install
+npm run build:clipper
+```
+
+1. 打开 `chrome://extensions`（Edge 为 `edge://extensions`），开启「开发者模式」，加载 **`dist-clipper/`** 目录。
+2. 登录自部署网页后，打开「更多 → 系统设置 → 浏览器插件」，点击「生成连接码」。
+3. 点击插件图标（或打开插件选项页），粘贴连接码并授权访问你的服务器地址，选择默认桌面与分组。
+4. 之后可在任意网页或链接上右键选择「添加当前网页到 77 Bookmarks」或「添加此链接到 77 Bookmarks」。
+
+该插件权限仅包含 `contextMenus`、`storage`、`activeTab`、`scripting` 与你授权的那一个服务器地址；连接码只具备读取桌面列表和添加书签的权限，不能修改、删除或导出数据。
+
+## 扩展版构建与安装
 
 需要 Node.js 22.12+ 和 Chrome / Edge 120+。
 
@@ -153,7 +187,9 @@ WebDAV 通常不提供浏览器跨域支持，建议在已安装的扩展中使�
 npm run dev          # http://localhost:8788，带热更新
 npm run typecheck
 npm test
-npm run build        # 同时生成 dist/ 和 dist-extension/
+npm run build        # 生成扩展版 dist/ 和 dist-extension/
+npm run build:selfhost # 生成自部署版 dist-selfhost/
+npm run build:clipper  # 生成精简右键插件 dist-clipper/
 npm run preview      # http://localhost:8788，预览构建结果
 ```
 
@@ -173,4 +209,4 @@ npm run test:sync:extension       # 两个扩展资料 + 本地真实 Worker/D1 
 
 后端独立验证：`npm ci --prefix sync-worker`、`npm run typecheck --prefix sync-worker`、`npm run deploy --prefix sync-worker -- --dry-run`。同步合并、两设备离线改动、传输层条件写入以及 Worker 的 SQLite 并发与版本保留测试均包含在根目录 `npm test` 中（Node.js 22 或更新版本）。
 
-目录：`sync-worker/` 为可独立部署的同步服务，`src/sync/` 为客户端同步，`src/` 为 React 界面，`src/storage/` 为本地数据层，`shared/` 为类型与备份校验，`extension/` 为扩展入口、弹窗和 Manifest，`scripts/` 为打包与浏览器检查。
+目录：`sync-worker/` 为可独立部署的同步服务，`server/` 为自部署版 Node 服务与 SQLite 存储，`clipper/` 为精简右键添加插件，`src/platform/` 为两版适配层，`src/sync/` 为客户端同步，`src/` 为 React 界面，`src/storage/` 为本地数据层，`shared/` 为类型与备份校验，`extension/` 为完整扩展入口、弹窗和 Manifest，`scripts/` 为打包与浏览器检查。

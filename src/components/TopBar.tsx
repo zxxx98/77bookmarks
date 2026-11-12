@@ -1,8 +1,9 @@
-import { BookmarkPlus, ChartNoAxesColumn, Check, ChevronDown, CornerDownLeft, Ellipsis, FoldVertical, FolderPlus, ListTodo, Monitor, Moon, Palette, Pencil, Plus, Settings, Sun, UnfoldVertical, X } from 'lucide-react'
+import { BookmarkPlus, ChartNoAxesColumn, Check, ChevronDown, CornerDownLeft, Ellipsis, FoldVertical, FolderPlus, ListTodo, LogOut, Monitor, Moon, Palette, Pencil, Plus, Settings, Sun, UnfoldVertical, X } from 'lucide-react'
 import type { RefObject } from 'react'
 import type { Desktop, DesktopSummary, View } from '../../shared/types'
 import { SEARCH_ENGINES, SearchEngineIcon, useSearchEngine, type SearchEngineId } from '../engines'
 import { STYLE_PRESETS, useStyle, useTheme, type StyleId, type StylePreset, type Theme } from '../theme'
+import { useLogout } from '../session'
 import { usePopover } from '../ui'
 import { DesktopSwitcher } from './DesktopSwitcher'
 import { ViewSwitch } from './ViewSwitch'
@@ -414,6 +415,7 @@ function MoreMenu({ view, onView, theme, onTheme, styleId, onStyle, allCollapsed
   const menu = usePopover<HTMLDivElement>()
 
   const item = 'flex w-full items-center gap-2.5 rounded-control px-2.5 py-2 text-left text-sm hover:bg-fg/6'
+  const logout = useLogout()
   const close = () => menu.setOpen(false)
   return (
     <div ref={menu.ref} className="relative">
@@ -488,6 +490,18 @@ function MoreMenu({ view, onView, theme, onTheme, styleId, onStyle, allCollapsed
             <Settings size={15} className="text-muted" />
             系统设置
           </button>
+          {logout && (
+            <button
+              className={item}
+              onClick={() => {
+                close()
+                logout()
+              }}
+            >
+              <LogOut size={15} className="text-muted" />
+              退出登录
+            </button>
+          )}
         </div>
       )}
     </div>

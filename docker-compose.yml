@@ -1,0 +1,16 @@
+services:
+  77bookmarks:
+    build: .
+    image: 77bookmarks:local
+    container_name: 77bookmarks
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:8080"
+    environment:
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:?请在环境变量或 .env 中设置 ADMIN_PASSWORD（至少 8 个字符）}"
+      TRUST_PROXY: "${TRUST_PROXY:-false}"
+    volumes:
+      - 77bookmarks-data:/data
+
+volumes:
+  77bookmarks-data:

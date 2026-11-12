@@ -1,0 +1,9 @@
+node_modules
+dist
+dist-extension
+dist-selfhost
+dist-clipper
+.git
+data
+artifacts
+*.local

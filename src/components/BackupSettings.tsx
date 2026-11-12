@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { backupStats, parseBackup, type ParsedBackup } from '../../shared/backup'
 import type { Desktop, DesktopSummary, ImportMode } from '../../shared/types'
 import { api } from '../api'
+import { platform } from '../platform'
 import { useAct, useUi } from '../ui'
 import { ChromeImportSettings } from './ChromeImportSettings'
 
@@ -128,7 +129,9 @@ export function BackupSettings({ onClose, desktops, desktop, onImported, onBusyC
         </div>
       </section>
 
-      <p className="text-xs leading-relaxed text-faint">数据默认只保存在当前浏览器的此个人资料中。请定期导出备份；卸载扩展会清除本地数据。需要多台设备共用时，可在「云同步」里配置自己的服务器。</p>
+      <p className="text-xs leading-relaxed text-faint">{platform.kind === 'selfhost'
+        ? '数据保存在服务器的数据目录中，所有登录的浏览器看到的是同一份。请定期导出备份，或备份服务器的数据目录。'
+        : '数据默认只保存在当前浏览器的此个人资料中。请定期导出备份；卸载扩展会清除本地数据。需要多台设备共用时，可在「云同步」里配置自己的服务器。'}</p>
       <section className="border-t border-line pt-4">
         <h3 className="label">导入</h3>
         <input ref={fileInput} type="file" accept="application/json,.json" disabled={importBusy} hidden onChange={chooseFile} />

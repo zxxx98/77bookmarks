@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { Cloud, DatabaseBackup, LayoutGrid, LoaderCircle, Settings } from 'lucide-react'
+import { Cloud, DatabaseBackup, LayoutGrid, LoaderCircle, MousePointerClick, Settings } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { MAX_SITE_NAME_LENGTH, type LayoutColumns, type SystemSettings } from '../../shared/settings'
 import type { Desktop, DesktopSummary } from '../../shared/types'
@@ -7,6 +7,8 @@ import { api } from '../api'
 import { Dialog, useUi } from '../ui'
 import { BackupSettings } from './BackupSettings'
 import { SyncSettings } from './SyncSettings'
+import { ClipperSettings } from './ClipperSettings'
+import { platform } from '../platform'
 
 interface Props {
   open: boolean
@@ -39,7 +41,7 @@ export function SettingsDialog({ open, ready, loadError, onRetry, ...props }: Pr
 function Content({ settings, importBusy, onBusyChange, ...backupProps }: Omit<Props, 'open' | 'ready' | 'loadError' | 'onRetry'> & { importBusy: boolean; onBusyChange: (busy: boolean) => void }) {
   const queryClient = useQueryClient()
   const { toast } = useUi()
-  const [tab, setTab] = useState<'general' | 'layout' | 'backup' | 'sync'>('general')
+  const [tab, setTab] = useState<'general' | 'layout' | 'backup' | 'sync' | 'clipper'>('general')
   const [name, setName] = useState(settings.siteName)
   const [openInNewTab, setOpenInNewTab] = useState(settings.openInNewTab)
   const [layoutColumns, setLayoutColumns] = useState(settings.layoutColumns)
@@ -77,6 +79,7 @@ function Content({ settings, importBusy, onBusyChange, ...backupProps }: Omit<Pr
           { id: 'layout', label: '布局设置', icon: LayoutGrid },
           { id: 'backup', label: '备份与恢复', icon: DatabaseBackup },
           { id: 'sync', label: '云同步', icon: Cloud },
+          ...(platform.clipper ? [{ id: 'clipper', label: '右键插件', icon: MousePointerClick } as const] : []),
         ] as const).map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -186,6 +189,11 @@ function Content({ settings, importBusy, onBusyChange, ...backupProps }: Omit<Pr
       <div role="tabpanel" id="settings-panel-sync" aria-labelledby="settings-tab-sync" hidden={tab !== 'sync'}>
         <SyncSettings onBusyChange={onBusyChange} importBusy={importBusy} />
       </div>
+      {platform.clipper && (
+        <div role="tabpanel" id="settings-panel-clipper" aria-labelledby="settings-tab-clipper" hidden={tab !== 'clipper'}>
+          {tab === 'clipper' && <ClipperSettings clipper={platform.clipper} />}
+        </div>
+      )}
 
     </>
   )

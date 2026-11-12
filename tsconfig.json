@@ -26,6 +26,7 @@
     "server",
     "vite.config.ts",
     "extension/**/*.ts",
-    "extension/lib.js"
+    "extension/lib.js",
+    "clipper/**/*.ts"
   ]
 }

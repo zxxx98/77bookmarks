@@ -3,6 +3,8 @@ import { DATA_CHANGED, DATA_MESSAGE, SYNC_MESSAGE, TITLE_MESSAGE } from '../src/
 import { SYNC_METHODS, runSyncMethod } from '../src/sync/control'
 import { fetchTitleHtml } from '../src/title-fetch'
 import { parseBookmarkUrl } from '../shared/url'
+import { attachContextMenuHandler, registerContextMenus, reportAddResult } from './context-menu'
+import { describeResult, isBookmarkable } from './lib'
 
 const service = new LocalService()
 
@@ -98,29 +100,23 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 chrome.runtime.onStartup.addListener(() => { void schedule(); void runSync(true) })
 
 chrome.runtime.onInstalled.addListener(({ reason }) => {
-  chrome.contextMenus.removeAll(() => {
-    chrome.contextMenus.create({ id: 'add-page', title: '添加当前网页到 77 Bookmarks', contexts: ['page'] })
-    chrome.contextMenus.create({ id: 'add-link', title: '添加此链接到 77 Bookmarks', contexts: ['link'] })
-  })
+  registerContextMenus()
   if (reason === 'install') void chrome.tabs.create({ url: chrome.runtime.getURL('index.html') })
   void schedule()
   void runSync(true)
 })
 
-chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId === 'add-link') void add(info.linkUrl ?? '', undefined, tab)
-  else if (info.menuItemId === 'add-page') void add(tab?.url ?? info.pageUrl ?? '', tab?.title, tab)
-})
+attachContextMenuHandler(add)
 chrome.commands.onCommand.addListener((command, tab) => {
   if (command === 'add-page') void add(tab?.url ?? '', tab?.title, tab)
 })
 
 async function add(url: string, title: string | undefined, tab: chrome.tabs.Tab | undefined) {
-  if (!/^https?:\/\//i.test(url)) { await report(tab, '这个页面不能添加为书签', true); return }
+  if (!isBookmarkable(url)) { await reportAddResult(tab, '这个页面不能添加为书签', true); return }
   try {
     const target = await chrome.storage.local.get(['desktopId', 'groupId'])
     const result = await service.addBookmark(url, Number(target.desktopId) || 0, Number(target.groupId) || undefined, title)
-    await report(tab, result.result.endsWith('exists') ? `「${result.siteTitle}」里已有这个书签` : `已添加到「${result.siteTitle}」`)
+    await reportAddResult(tab, describeResult(result))
     void chrome.runtime.sendMessage({ type: DATA_CHANGED }).catch(() => undefined)
     void soon()
     // Fetch only from Chrome's favicon cache; saving the bookmark never waits on the network.
@@ -128,28 +124,7 @@ async function add(url: string, title: string | undefined, tab: chrome.tabs.Tab 
       await service.setIcon(result.siteId).catch(() => undefined)
       void chrome.runtime.sendMessage({ type: DATA_CHANGED }).catch(() => undefined)
     }
-  } catch (error) { await report(tab, error instanceof Error ? error.message : '添加失败', true) }
-}
-async function report(tab: chrome.tabs.Tab | undefined, message: string, failed = false) {
-  const tabId = tab?.id
-  await chrome.action.setBadgeBackgroundColor({ color: failed ? '#b3402f' : '#3b6956', ...(tabId ? { tabId } : {}) })
-  await chrome.action.setBadgeText({ text: failed ? '!' : '✓', ...(tabId ? { tabId } : {}) })
-  await chrome.action.setTitle({ title: message, ...(tabId ? { tabId } : {}) })
-  if (!tabId) return
-  try {
-    await chrome.scripting.executeScript({ target: { tabId }, args: [message, failed], func: (text: string, error: boolean) => {
-      document.getElementById('bookmarks-77-toast')?.remove()
-      const host = document.createElement('div')
-      host.id = 'bookmarks-77-toast'
-      host.style.cssText = 'position:fixed;top:16px;right:16px;z-index:2147483647'
-      const box = document.createElement('div')
-      box.textContent = text
-      box.style.cssText = `font:13px/1.5 system-ui;padding:12px 16px;border-radius:8px;color:white;background:${error ? '#b3402f' : '#262522'};max-width:320px;overflow-wrap:anywhere;box-shadow:0 8px 28px #0004`
-      host.attachShadow({ mode: 'closed' }).append(box)
-      document.documentElement.append(host)
-      setTimeout(() => host.remove(), 4000)
-    } })
-  } catch { /* Restricted pages use the toolbar badge. */ }
+  } catch (error) { await reportAddResult(tab, error instanceof Error ? error.message : '添加失败', true) }
 }
 
 void schedule()
