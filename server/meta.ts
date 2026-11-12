@@ -38,8 +38,42 @@ function clean(value: string | null | undefined, max = 80): string | null {
 
 const TITLE_SEPARATOR = /\s+[-–—·•_]\s+|\s*[|｜]\s*/
 const GENERIC_TITLE = /^(home|homepage|index|welcome|首页|主页|官网)$/i
-/** Thrown to stop reading a page once its head is over */
-const STOP_AT_BODY = Symbol('stop at body')
+/**
+ * How much of a page is read. The title and the icon links are in the head, near the start, and
+ * the rest of a page is of no use here.
+ */
+const HEAD_BYTES = 128 * 1024
+
+/**
+ * The beginning of a page: the title and the icon links are in there, and the rest is not read,
+ * which keeps the work of a fetch small.
+ */
+function heading(response: Response): Response {
+  const body = response.body
+  if (!body) return response
+  const reader = body.getReader()
+  let seen = 0
+  const head = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const { done, value } = await reader.read()
+      if (done) {
+        controller.close()
+        return
+      }
+      seen += value.byteLength
+      controller.enqueue(value)
+      if (seen >= HEAD_BYTES) {
+        controller.close()
+        void reader.cancel()
+      }
+    },
+    cancel(reason) {
+      void reader.cancel(reason)
+    },
+  })
+  // The headers of the original response describe the whole page, not this part of it
+  return new Response(head, { headers: { 'Content-Type': response.headers.get('Content-Type') ?? 'text/html' } })
+}
 
 function titleParts(title: string): string[] {
   return title
@@ -99,7 +133,6 @@ export async function fetchPageMeta(pageUrl: string): Promise<PageMeta> {
     meta.finalUrl = response.url
 
     let title = ''
-    let stopped = false
     const icons: { href: string; rank: number }[] = []
     const rewriter = new HTMLRewriter()
       .on('head title', {
@@ -130,19 +163,7 @@ export async function fetchPageMeta(pageUrl: string): Promise<PageMeta> {
           }
         },
       })
-      .on('body', {
-        element() {
-          // The title and the icon links are all in the head, so the rest of the page is not read
-          stopped = true
-          throw STOP_AT_BODY
-        },
-      })
-    try {
-      await rewriter.transform(response).arrayBuffer()
-    } catch (error) {
-      // The rewrite ends by throwing, which the runtime may report in its own words
-      if (!stopped) throw error
-    }
+    await rewriter.transform(heading(response)).arrayBuffer()
 
     meta.title = clean(title)
     meta.icons = icons.sort((a, b) => b.rank - a.rank).map((icon) => icon.href)

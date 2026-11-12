@@ -8,7 +8,6 @@ import { parseBookmarkUrl } from '../shared/url'
 import { api, ApiError } from './api'
 import { updateBoardCache } from './board-cache'
 import { recordClick } from './clicks'
-import { useDirectIcons } from './direct-icons'
 import { AddBookmarkDialog } from './components/AddBookmarkDialog'
 import { BoardView } from './components/BoardView'
 import { EditSiteDialog } from './components/EditSiteDialog'
@@ -208,8 +207,6 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [usageOpen, setUsageOpen] = useState(false)
   const todos = useTodos()
-  // Moves the icons that are stored here to the addresses of the sites themselves, once
-  useDirectIcons()
   // Remembered per browser, like the desktop shown
   const [todoOpen, setTodoOpen] = useState(storedTodoOpen)
   const [todoFocus, setTodoFocus] = useState(0)
