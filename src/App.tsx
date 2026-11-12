@@ -5,6 +5,7 @@ import { motion } from 'motion/react'
 import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from 'react'
 import type { SystemSettings } from '../shared/settings'
 import type { BoardPage, View } from '../shared/types'
+import { DEFAULT_GROUP_NAME } from '../shared/sync'
 import { parseBookmarkUrl } from '../shared/url'
 import { api } from './api'
 import { onDataChanged } from './storage/client'
@@ -12,6 +13,7 @@ import { updateBoardCache } from './board-cache'
 import { recordClick } from './clicks'
 import { AddBookmarkDialog } from './components/AddBookmarkDialog'
 import { BoardView } from './components/BoardView'
+import { CreateGroupDialog } from './components/CreateGroupDialog'
 import { EditSiteDialog } from './components/EditSiteDialog'
 import { SettingsDialog } from './components/SettingsDialog'
 import { TodoPanel } from './components/TodoPanel'
@@ -140,6 +142,7 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
   const [editing, setEditing] = useState(false)
   // null closes the dialog; an empty string opens it without a pasted URL
   const [addingUrl, setAddingUrl] = useState<string | null>(null)
+  const [creatingGroup, setCreatingGroup] = useState<{ id: number; name: string } | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [usageOpen, setUsageOpen] = useState(false)
   const todos = useTodos()
@@ -175,6 +178,7 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
       onSelectDesktop(id)
       setEditing(false)
       setAddingUrl(null)
+      setCreatingGroup(null)
       setEditingSiteId(null)
       window.scrollTo({ top: 0 })
     },
@@ -340,7 +344,7 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
     if (Math.abs(dx) >= SWIPE_DISTANCE && Math.abs(dx) > Math.abs(dy) * 2) stepDesktop(dx < 0 ? 1 : -1)
   }
 
-  const empty = desktop.groups.every((g) => g.sites.length === 0)
+  const showWelcome = desktop.groups.length <= 1 && desktop.groups.every((g) => g.name === DEFAULT_GROUP_NAME && g.sites.length === 0)
   const noResults = searching && result.groups.length === 0
 
   const handleSearchEngine = useCallback(() => {
@@ -383,6 +387,7 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
         editing={editing}
         onToggleEditing={() => !loading && setEditing(!editing)}
         onAdd={() => !loading && setAddingUrl('')}
+        onCreateGroup={() => !loading && setCreatingGroup({ id: desktop.id, name: desktop.name })}
         onSettings={() => setSettingsOpen(true)}
         onUsage={() => setUsageOpen(true)}
         todoOpen={todoOpen}
@@ -410,7 +415,7 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
                 <button className="btn btn-soft" onClick={onRetryBoard}>重试</button>
               </> : <LoaderCircle className="animate-spin text-faint" />}
             </div>
-          ) : empty && !editing && !searching ? (
+          ) : showWelcome && !editing && !searching ? (
             <div className="grid animate-rise place-items-center py-28 text-center">
               <span className="mb-4 grid size-14 place-items-center rounded-card border-[length:var(--border-w)] border-line bg-accent-soft text-accent">
                 <BookmarkPlus size={26} />
@@ -490,6 +495,7 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
         </div>
       </main>
       <AddBookmarkDialog open={addingUrl !== null} initialUrl={addingUrl ?? ''} onClose={() => setAddingUrl(null)} desktop={desktop} />
+      {creatingGroup && <CreateGroupDialog desktop={creatingGroup} onClose={() => setCreatingGroup(null)} onCreated={() => { setQuery(''); setCreatingGroup(null) }} />}
       <EditSiteDialog site={editingSite} desktop={desktop} desktops={desktops} onClose={() => setEditingSiteId(null)} />
       <UsageDialog open={usageOpen} onClose={() => setUsageOpen(false)} desktops={desktops} desktop={desktop} />
       <SettingsDialog ready={settingsReady} loadError={settingsError} onRetry={onRetrySettings} open={settingsOpen} onClose={() => setSettingsOpen(false)} settings={settings} desktops={desktops} desktop={desktop} onImported={switchDesktop} />

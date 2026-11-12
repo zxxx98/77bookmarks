@@ -152,6 +152,7 @@ export function BoardView({ desktop, groups, editing, sortable, matchedLinks, co
   const act = useAct()
   const { toast, confirm } = useUi()
   const [draft, setDraft] = useState<Group[] | null>(null)
+  const dragging = useRef(false)
   const [activeSite, setActiveSite] = useState<Site | null>(null)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; site: Site } | null>(null)
   const contextMenuRef = useRef<HTMLDivElement>(null)
@@ -223,6 +224,10 @@ export function BoardView({ desktop, groups, editing, sortable, matchedLinks, co
   )
   const view = draft ?? groups
 
+  useEffect(() => {
+    if (!dragging.current) setDraft(null)
+  }, [groups])
+
   // Pinning moves a group across the page, so the groups glide from where they were (FLIP)
   const sectionEls = useRef(new Map<number, HTMLElement>())
   const flipFrom = useRef<Map<number, { x: number; y: number }> | null>(null)
@@ -279,6 +284,7 @@ export function BoardView({ desktop, groups, editing, sortable, matchedLinks, co
   }
 
   const onDragEnd = ({ active, over }: DragEndEvent) => {
+    dragging.current = false
     dragJustEndedRef.current = true
     setTimeout(() => {
       dragJustEndedRef.current = false
@@ -305,7 +311,9 @@ export function BoardView({ desktop, groups, editing, sortable, matchedLinks, co
         }
       }
     }
-    setDraft(null)
+    // The query observer publishes cache updates asynchronously. Keep the committed order
+    // rendered until it catches up, so the drop animation measures the new location.
+    setDraft(next === groups ? null : next)
     setActiveSite(null)
     if (next === groups) return
 
@@ -323,6 +331,7 @@ export function BoardView({ desktop, groups, editing, sortable, matchedLinks, co
       sensors={sensors}
       collisionDetection={collisionDetection}
       onDragStart={({ active }) => {
+        dragging.current = true
         const a = ref(active.id)
         if (!editing) onStartEditing?.()
         navigator.vibrate?.(40)
@@ -333,6 +342,7 @@ export function BoardView({ desktop, groups, editing, sortable, matchedLinks, co
       onDragOver={onDragOver}
       onDragEnd={onDragEnd}
       onDragCancel={() => {
+        dragging.current = false
         dragJustEndedRef.current = true
         setTimeout(() => {
           dragJustEndedRef.current = false

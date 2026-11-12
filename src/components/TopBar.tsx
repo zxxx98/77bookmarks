@@ -1,4 +1,4 @@
-import { ChartNoAxesColumn, Check, ChevronDown, CornerDownLeft, Ellipsis, FoldVertical, ListTodo, Monitor, Moon, Palette, Pencil, Plus, Settings, Sun, UnfoldVertical, X } from 'lucide-react'
+import { BookmarkPlus, ChartNoAxesColumn, Check, ChevronDown, CornerDownLeft, Ellipsis, FoldVertical, FolderPlus, ListTodo, Monitor, Moon, Palette, Pencil, Plus, Settings, Sun, UnfoldVertical, X } from 'lucide-react'
 import type { RefObject } from 'react'
 import type { Desktop, DesktopSummary, View } from '../../shared/types'
 import { SEARCH_ENGINES, SearchEngineIcon, useSearchEngine, type SearchEngineId } from '../engines'
@@ -52,6 +52,7 @@ interface Props {
   editing: boolean
   onToggleEditing: () => void
   onAdd: () => void
+  onCreateGroup: () => void
   onSettings: () => void
   onUsage: () => void
   todoOpen: boolean
@@ -77,6 +78,7 @@ export function TopBar({
   editing,
   onToggleEditing,
   onAdd,
+  onCreateGroup,
   onSettings,
   onUsage,
   todoOpen,
@@ -203,12 +205,47 @@ export function TopBar({
           onSettings={onSettings}
           onUsage={onUsage}
         />
-        <button className="btn btn-primary max-sm:w-9 max-sm:px-0" onClick={onAdd} aria-label="添加书签">
-          <Plus size={16} strokeWidth={2.5} />
-          <span className="max-sm:hidden">添加</span>
-        </button>
+        <AddMenu onAdd={onAdd} onCreateGroup={onCreateGroup} />
       </div>
     </header>
+  )
+}
+
+function AddMenu({ onAdd, onCreateGroup }: { onAdd: () => void; onCreateGroup: () => void }) {
+  const menu = usePopover<HTMLDivElement>()
+  const item = 'flex w-full items-center gap-2.5 rounded-control px-2.5 py-2 text-left text-sm transition hover:bg-fg/6 focus-visible:bg-fg/6'
+
+  return (
+    <div ref={menu.ref} className="relative shrink-0">
+      <div className="flex">
+        <button className="btn btn-primary rounded-r-none max-sm:hidden" onClick={onAdd} aria-label="添加书签">
+          <Plus size={16} strokeWidth={2.5} />
+          添加
+        </button>
+        <button
+          className="btn btn-primary w-7 px-0 max-sm:w-9 sm:rounded-l-none sm:border-l-accent-fg/25"
+          aria-label="添加选项"
+          title="添加书签或新建分组"
+          aria-expanded={menu.open}
+          onClick={() => menu.setOpen(!menu.open)}
+        >
+          <ChevronDown size={14} className="max-sm:hidden" />
+          <Plus size={16} strokeWidth={2.5} className="sm:hidden" />
+        </button>
+      </div>
+      {menu.open && (
+        <div className="popover-panel absolute top-11 right-0 z-40 w-40 animate-rise p-1.5 [animation-duration:0.15s]">
+          <button className={item} onClick={() => { menu.setOpen(false); onAdd() }}>
+            <BookmarkPlus size={15} className="text-muted" />
+            添加书签
+          </button>
+          <button className={item} onClick={() => { menu.setOpen(false); onCreateGroup() }}>
+            <FolderPlus size={15} className="text-muted" />
+            新建分组
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 

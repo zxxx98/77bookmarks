@@ -1,8 +1,9 @@
 import { LoaderCircle } from 'lucide-react'
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import type { AddResult, Desktop } from '../../shared/types'
-import { parseBookmarkUrl, parseIconUrl } from '../../shared/url'
+import { fallbackLinkTitle, fullUrl, parseBookmarkUrl, parseIconUrl } from '../../shared/url'
 import { api } from '../api'
+import { requestPageTitle, type PageTitleResult } from '../page-title'
 import { Dialog, useAct, useUi } from '../ui'
 import { SiteIcon } from './SiteIcon'
 
@@ -13,6 +14,13 @@ const RESULT_MESSAGE: Record<AddResult['result'], (title: string) => string> = {
   link_exists: (title) => `「${title}」上已有这个链接`,
 }
 
+interface LinkTitleDraft {
+  url: string
+  name: string
+  edited: boolean
+  status: PageTitleResult['status'] | 'loading'
+}
+
 /** Adds to `desktop`, the one currently shown */
 export function AddBookmarkDialog({ open, initialUrl = '', onClose, desktop }: { open: boolean; initialUrl?: string; onClose: () => void; desktop: Desktop }) {
   const groups = desktop.groups
@@ -21,6 +29,8 @@ export function AddBookmarkDialog({ open, initialUrl = '', onClose, desktop }: {
   const [url, setUrl] = useState('')
   const [groupId, setGroupId] = useState<number | undefined>()
   const [busy, setBusy] = useState(false)
+  const [titleDraft, setTitleDraft] = useState<LinkTitleDraft | null>(null)
+  const titleRequest = useRef(0)
   /** null while the optional icon field is folded away */
   const [iconUrl, setIconUrl] = useState<string | null>(null)
 
@@ -32,16 +42,47 @@ export function AddBookmarkDialog({ open, initialUrl = '', onClose, desktop }: {
 
   const parsed = useMemo(() => parseBookmarkUrl(url), [url])
   const existing = useMemo(() => (parsed ? groups.flatMap((g) => g.sites).find((s) => s.origin === parsed.origin) : undefined), [parsed, groups])
+  const titleUrl = parsed?.path && !existing?.links.some((link) => link.path === parsed.path) ? fullUrl(parsed.origin, parsed.path) : null
+  const defaultTitle = parsed?.path ? fallbackLinkTitle(parsed.path).slice(0, 80) : ''
+  const currentTitle = titleDraft?.url === titleUrl ? titleDraft : null
+  const linkTitle = currentTitle?.name ?? defaultTitle
   const selectedGroup = groups.find((g) => g.id === groupId)?.id ?? groups[0]?.id
   const customIcon = iconUrl?.trim() ? parseIconUrl(iconUrl) : null
   const iconInvalid = !!iconUrl?.trim() && !customIcon
 
+  const readTitle = useCallback(async (target: string, requestPermission: boolean, version: number) => {
+    if (titleRequest.current !== version) return
+    setTitleDraft((draft) => draft?.url === target ? { ...draft, status: 'loading' } : draft)
+    const result = await requestPageTitle(target, { requestPermission })
+    if (titleRequest.current !== version) return
+    setTitleDraft((draft) => draft?.url === target ? {
+      ...draft,
+      status: result.status,
+      name: !draft.edited && result.status === 'success' ? result.title : draft.name,
+    } : draft)
+  }, [])
+
+  useEffect(() => {
+    const version = ++titleRequest.current
+    if (!open || !titleUrl) { setTitleDraft(null); return }
+    const path = parseBookmarkUrl(titleUrl)!.path!
+    setTitleDraft({ url: titleUrl, name: fallbackLinkTitle(path).slice(0, 80), edited: false, status: 'loading' })
+    const timer = setTimeout(() => { void readTitle(titleUrl, false, version) }, 400)
+    return () => {
+      clearTimeout(timer)
+      // Ignore late responses after changing URL, closing the dialog or reopening it.
+      titleRequest.current++
+    }
+  }, [open, titleUrl, readTitle])
+
   const submit = async (event: FormEvent) => {
     event.preventDefault()
     if (!parsed || busy || iconInvalid) return
+    titleRequest.current++
     setBusy(true)
     const ok = await act(async () => {
-      const result = await api.addBookmark(url, desktop.id, selectedGroup)
+      const title = titleUrl ? linkTitle.trim() || defaultTitle : undefined
+      const result = await api.addBookmark(url, desktop.id, selectedGroup, title)
       toast(RESULT_MESSAGE[result.result](result.siteTitle))
       // A custom icon only applies to a card created just now, never to one that was already there
       if (customIcon && result.result === 'site_created') await api.setIcon(result.siteId, { url: customIcon })
@@ -51,7 +92,7 @@ export function AddBookmarkDialog({ open, initialUrl = '', onClose, desktop }: {
   }
 
   return (
-    <Dialog open={open} onClose={onClose} title="添加书签">
+    <Dialog open={open} onClose={onClose} closeDisabled={busy} title="添加书签">
       <form onSubmit={submit}>
         <label className="label" htmlFor="bookmark-url">
           网址
@@ -63,6 +104,7 @@ export function AddBookmarkDialog({ open, initialUrl = '', onClose, desktop }: {
           autoFocus
           autoComplete="off"
           spellCheck={false}
+          disabled={busy}
           value={url}
           onChange={(event) => setUrl(event.target.value)}
         />
@@ -94,6 +136,39 @@ export function AddBookmarkDialog({ open, initialUrl = '', onClose, desktop }: {
           )}
         </div>
 
+        {titleUrl && (
+          <div className="mt-4">
+            <label className="label" htmlFor="bookmark-link-title">子链接名称</label>
+            <input
+              id="bookmark-link-title"
+              className="input"
+              maxLength={80}
+              placeholder={defaultTitle}
+              value={linkTitle}
+              disabled={busy}
+              onChange={(event) => setTitleDraft({ url: titleUrl, name: event.target.value, edited: true, status: currentTitle?.status ?? 'loading' })}
+            />
+            <div className="mt-2 flex items-center justify-between gap-2 text-xs text-muted">
+              <p role="status" className="flex items-center gap-1.5">
+                {currentTitle?.status === 'loading' ? (
+                  <><LoaderCircle size={13} className="shrink-0 animate-spin" />正在读取网页标题，可直接修改名称并添加。</>
+                ) : currentTitle?.status === 'permission' ? (
+                  '可直接修改名称，或授权读取网页标题。'
+                ) : currentTitle?.status === 'success' ? (
+                  currentTitle.edited ? '已读取网页标题，保留你填写的名称。' : '已读取网页标题，名称可修改。'
+                ) : (
+                  currentTitle?.edited ? '未能读取网页标题，使用你填写的名称。' : '未能读取网页标题，已使用路径末段，名称可修改。'
+                )}
+              </p>
+              {currentTitle?.status === 'permission' && (
+                <button type="button" className="btn btn-soft shrink-0" disabled={busy} onClick={() => { void readTitle(titleUrl, true, ++titleRequest.current) }}>
+                  读取网页标题
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {groups.length > 0 && !existing && (
           <div className="mt-4">
             <span className="label">分组</span>
@@ -102,6 +177,7 @@ export function AddBookmarkDialog({ open, initialUrl = '', onClose, desktop }: {
                 <button
                   key={group.id}
                   type="button"
+                  disabled={busy}
                   aria-pressed={group.id === selectedGroup}
                   className={`rounded-pill border-[length:var(--border-w)] px-3 py-1 text-sm transition ${
                     group.id === selectedGroup ? 'border-accent/60 bg-accent-soft font-medium text-accent' : 'border-line text-muted hover:text-fg'
@@ -117,7 +193,7 @@ export function AddBookmarkDialog({ open, initialUrl = '', onClose, desktop }: {
 
         {!existing &&
           (iconUrl === null ? (
-            <button type="button" className="mt-3 text-xs text-muted underline-offset-2 hover:text-accent hover:underline" onClick={() => setIconUrl('')}>
+            <button type="button" disabled={busy} className="mt-3 text-xs text-muted underline-offset-2 hover:text-accent hover:underline" onClick={() => setIconUrl('')}>
               使用自定义图标地址
             </button>
           ) : (
@@ -133,6 +209,7 @@ export function AddBookmarkDialog({ open, initialUrl = '', onClose, desktop }: {
                 autoComplete="off"
                 spellCheck={false}
                 maxLength={2000}
+                disabled={busy}
                 value={iconUrl}
                 onChange={(event) => setIconUrl(event.target.value)}
               />
@@ -140,8 +217,8 @@ export function AddBookmarkDialog({ open, initialUrl = '', onClose, desktop }: {
           ))}
 
         <div className="mt-5 flex items-center justify-end gap-2">
-          {busy && <span className="mr-auto text-xs text-muted">正在保存到本地…</span>}
-          <button type="button" className="btn btn-soft" onClick={onClose}>
+          {busy && <span role="status" className="mr-auto text-xs text-muted">正在保存到本地…</span>}
+          <button type="button" className="btn btn-soft" disabled={busy} onClick={onClose}>
             取消
           </button>
           <button className="btn btn-primary" disabled={!parsed || busy || iconInvalid}>

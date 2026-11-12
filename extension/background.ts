@@ -1,6 +1,8 @@
 import { LocalService, READ_METHODS, SERVICE_METHODS, type ServiceMethod } from '../src/storage/service'
 import { DATA_CHANGED, DATA_MESSAGE, SYNC_MESSAGE } from '../src/storage/client'
 import { SYNC_METHODS, runSyncMethod } from '../src/sync/control'
+import { fetchTitleHtml, TITLE_MESSAGE } from '../src/page-title'
+import { parseBookmarkUrl } from '../shared/url'
 
 const service = new LocalService()
 
@@ -8,6 +10,17 @@ const service = new LocalService()
 const SYNC_SOON = '77bookmarks:sync-soon'
 /** Periodically pulls what other devices changed, even when this board is idle */
 const SYNC_TICK = '77bookmarks:sync-tick'
+
+chrome.runtime.onMessage.addListener((message, sender, respond) => {
+  if (sender.id !== chrome.runtime.id || message?.type !== TITLE_MESSAGE) return
+  const parsed = typeof message.url === 'string' ? parseBookmarkUrl(message.url) : null
+  if (!parsed?.path) { respond({ html: null }); return }
+  // Permission is requested by the page's submit gesture, never by the worker.
+  void chrome.permissions.contains({ origins: [`${parsed.origin}/*`] }).then(
+    (granted) => granted ? fetchTitleHtml(message.url) : null,
+  ).then((html) => respond({ html }), () => respond({ html: null }))
+  return true
+})
 
 chrome.runtime.onMessage.addListener((message, sender, respond) => {
   if (sender.id !== chrome.runtime.id || message?.type !== DATA_MESSAGE) return

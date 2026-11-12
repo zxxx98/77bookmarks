@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit -p .",
     "test": "vitest run",
     "test:extension": "npm run build && node scripts/test-extension.mjs",
+    "test:drag:extension": "npm run build && node scripts/test-drag-extension.mjs",
     "test:sync:extension": "npm run build && node scripts/test-sync-extension.mjs"
   },
   "dependencies": {

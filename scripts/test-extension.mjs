@@ -2,11 +2,31 @@ import { chromium, expect } from '@playwright/test'
 import { mkdtemp, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { resolve, join } from 'node:path'
+import { createServer } from 'node:http'
 
 const extensionPath = resolve('dist-extension')
 const profile = await mkdtemp(join(tmpdir(), '77bookmarks-extension-'))
 const errors = []
 const requests = []
+const titleRequests = []
+const titleResponses = []
+// Deliberately omit CORS headers: the extension worker must use its granted host access.
+const titleServer = createServer((request, response) => {
+  titleRequests.push(request.url)
+  if (request.url === '/slow') return
+  response.setHeader('Content-Type', 'text/html; charset=utf-8')
+  const body = request.url === '/docs' ? '<head><title>中文 &amp; 标题测试</title></head>'
+    : request.url === '/other' ? '<head><title>切换后的标题</title></head>'
+    : request.url === '/delayed' || request.url === '/late' || request.url === '/early-save' ? '<head><title>迟到的网页标题</title></head>'
+    : '<head></head>'
+  const finish = () => { response.end(body); titleResponses.push(request.url) }
+  if (request.url === '/delayed' || request.url === '/late') setTimeout(finish, 1200)
+  else if (request.url === '/early-save') setTimeout(finish, 2000)
+  else finish()
+})
+await new Promise((resolve) => titleServer.listen(0, '127.0.0.1', resolve))
+titleServer.unref()
+const titleOrigin = `http://127.0.0.1:${titleServer.address().port}`
 const options = {
   headless: true,
   ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : { channel: 'chromium' }),
@@ -65,6 +85,85 @@ try {
   // Genuine toolbar popup reads and writes the same local database.
   const webPage = await context.newPage()
   await context.setOffline(false)
+
+  const openChildUrl = async (path) => {
+    await page.getByRole('button', { name: '添加书签', exact: true }).click()
+    await page.getByLabel('网址', { exact: true }).click()
+    await page.getByLabel('网址', { exact: true }).fill(`${titleOrigin}${path}`)
+  }
+  const saveChildUrl = async () => {
+    await page.getByRole('dialog').getByRole('button', { name: '添加', exact: true }).click()
+    await expect(page.getByRole('dialog')).toHaveCount(0, { timeout: 1500 })
+    return (await rpc(page, 'board')).desktop.groups.flatMap((g) => g.sites).find((s) => s.origin === titleOrigin)
+  }
+  const nameInput = page.getByLabel('子链接名称', { exact: true })
+  // Pasting alone must never open a native permission prompt or block saving.
+  await openChildUrl('/needs-permission')
+  await expect(page.getByRole('button', { name: '读取网页标题', exact: true })).toBeVisible()
+  await expect(nameInput).toHaveValue('needs-permission')
+  expect(titleRequests).toEqual([])
+  await saveChildUrl()
+
+  // Grant the fixture site using Chrome's extension settings, avoiding a native prompt in headless mode.
+  const extensionsPage = await context.newPage()
+  await extensionsPage.goto('chrome://extensions/')
+  await extensionsPage.evaluate(({ id, origin }) => chrome.developerPrivate.addHostPermission(id, `${origin}/*`), { id, origin: titleOrigin })
+  await extensionsPage.close()
+
+  await openChildUrl('/docs')
+  // Complete the first optional permission request from the explicit button gesture.
+  await page.getByRole('button', { name: '读取网页标题', exact: true }).click()
+  await expect(nameInput).toHaveValue('中文 & 标题测试')
+  // A preview does not write a bookmark until the user clicks Add.
+  expect((await rpc(page, 'board')).desktop.groups.flatMap((g) => g.sites).find((s) => s.origin === titleOrigin).links.some((l) => l.path === '/docs')).toBe(false)
+  await mkdir('artifacts', { recursive: true })
+  await page.screenshot({ path: 'artifacts/add-bookmark-title.png' })
+  const titledSite = await saveChildUrl()
+  expect(titledSite.title).toBe(titleOrigin.replace('http://', ''))
+  const titledLink = titledSite.links.find((l) => l.path === '/docs')
+  expect(titledLink.title).toBe('中文 & 标题测试')
+  expect(titleRequests).toEqual(['/docs'])
+  await rpc(page, 'renameLink', titledLink.id, '手动修改的名称')
+  await openChildUrl('/docs')
+  await expect(nameInput).toHaveCount(0)
+  expect((await saveChildUrl()).links.find((l) => l.path === '/docs').title).toBe('手动修改的名称')
+  expect(titleRequests).toEqual(['/docs'])
+
+  await openChildUrl('/no-title')
+  await expect(page.getByText('未能读取网页标题，已使用路径末段，名称可修改。', { exact: true })).toBeVisible()
+  await expect(nameInput).toHaveValue('no-title')
+  await nameInput.fill('手动填写的名称')
+  expect((await saveChildUrl()).links.find((l) => l.path === '/no-title').title).toBe('手动填写的名称')
+
+  await openChildUrl('/slow')
+  await expect(page.getByText('未能读取网页标题，已使用路径末段，名称可修改。', { exact: true })).toBeVisible()
+  const slowSite = await saveChildUrl()
+  expect(slowSite.links.find((l) => l.path === '/slow').title).toBe('slow')
+
+  await openChildUrl('/delayed')
+  await expect.poll(() => titleRequests.includes('/delayed')).toBe(true)
+  await nameInput.fill('抓取期间手动填写')
+  await expect(page.getByText('已读取网页标题，保留你填写的名称。', { exact: true })).toBeVisible()
+  await expect(nameInput).toHaveValue('抓取期间手动填写')
+  expect((await saveChildUrl()).links.find((l) => l.path === '/delayed').title).toBe('抓取期间手动填写')
+
+  await openChildUrl('/late')
+  await expect.poll(() => titleRequests.includes('/late')).toBe(true)
+  await page.getByLabel('网址', { exact: true }).fill(`${titleOrigin}/other`)
+  await expect(nameInput).toHaveValue('切换后的标题')
+  await expect.poll(() => titleResponses.includes('/late')).toBe(true)
+  await expect(nameInput).toHaveValue('切换后的标题')
+  const switchedSite = await saveChildUrl()
+  expect(switchedSite.links.find((l) => l.path === '/other').title).toBe('切换后的标题')
+  expect(switchedSite.links.some((l) => l.path === '/late')).toBe(false)
+
+  await openChildUrl('/early-save')
+  await expect.poll(() => titleRequests.includes('/early-save')).toBe(true)
+  expect((await saveChildUrl()).links.find((l) => l.path === '/early-save').title).toBe('early-save')
+  await expect.poll(() => titleResponses.includes('/early-save')).toBe(true)
+  expect((await rpc(page, 'board')).desktop.groups.flatMap((g) => g.sites).find((s) => s.origin === titleOrigin).links.find((l) => l.path === '/early-save').title).toBe('early-save')
+  console.log('✓ Title preview, editable fallbacks, manual names, stale responses and saving during lookup')
+
   await webPage.route('https://saved.example.com/**', (route) => route.fulfill({ contentType: 'text/html; charset=utf-8', body: '<meta charset="utf-8"><title>收藏页面标题</title><h1>测试页面</h1>' }))
   await webPage.goto('https://saved.example.com/guide')
   await webPage.bringToFront()
@@ -143,7 +242,7 @@ try {
 
   await page.screenshot({ path: 'artifacts/extension-newtab.png', fullPage: true })
   expect(errors).toEqual([])
-  // The one intentional navigation is fulfilled locally by Playwright; app code makes no HTTP calls.
+  // Page navigation is fulfilled by Playwright; worker title requests go only to the local fixture server.
   expect(requests.filter((u) => !u.startsWith('https://saved.example.com/'))).toEqual([])
   await context.close()
   context = await chromium.launchPersistentContext(profile, options)
@@ -163,4 +262,6 @@ try {
   throw error
 } finally {
   await context.close()
+  titleServer.closeAllConnections()
+  await new Promise((resolve) => titleServer.close(resolve))
 }
