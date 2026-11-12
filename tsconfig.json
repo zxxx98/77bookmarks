@@ -16,12 +16,14 @@
     ],
     "types": [
       "vite/client",
+      "node",
       "chrome"
     ]
   },
   "include": [
     "src",
     "shared",
+    "server",
     "vite.config.ts",
     "extension/**/*.ts",
     "extension/lib.js"

@@ -1,6 +1,7 @@
 import { LoaderCircle, RefreshCw, ShieldCheck, TriangleAlert } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { api } from '../api'
+import { platform } from '../platform'
 import { onDataChanged } from '../storage/client'
 import type { SyncConfig, SyncKind, SyncStatus } from '../sync/types'
 import { useAct, useUi } from '../ui'
@@ -73,10 +74,12 @@ export function SyncSettings({ onBusyChange, importBusy }: Props) {
   const originLabel = origin?.replace(/\/\*$/, '') ?? ''
 
   useEffect(() => {
-    if (typeof chrome === 'undefined' || !chrome.permissions) { setPermission('unavailable'); return }
+    // The self-hosted server makes the requests itself, so there is nothing to grant
+    const access = platform.hostAccess
+    if (!access) { setPermission(platform.kind === 'extension' ? 'unavailable' : 'unknown'); return }
     if (form?.kind !== 'webdav' || !origin) { setPermission('unknown'); return }
     let alive = true
-    void chrome.permissions.contains({ origins: [origin] }).then(
+    void access.contains(origin).then(
       (granted) => { if (alive) setPermission(granted ? 'granted' : 'missing') },
       () => { if (alive) setPermission('unknown') },
     )
@@ -135,8 +138,9 @@ export function SyncSettings({ onBusyChange, importBusy }: Props) {
   }
 
   const requestPermission = async () => {
-    if (!origin || typeof chrome === 'undefined' || !chrome.permissions) return
-    const granted = await chrome.permissions.request({ origins: [origin] }).catch(() => false)
+    const access = platform.hostAccess
+    if (!origin || !access) return
+    const granted = await access.request(origin).catch(() => false)
     setPermission(granted ? 'granted' : 'missing')
   }
 

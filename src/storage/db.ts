@@ -83,6 +83,12 @@ export async function openLocalDatabase(name = DATABASE_NAME): Promise<LocalData
     },
     blocking() { db.close() },
   })
+  await seedDatabase(db)
+  return db
+}
+
+/** First-run records, shared by every storage backend the service can run on */
+export async function seedDatabase(db: LocalDatabase): Promise<void> {
   // Initialization is transactional, including concurrent first opens from different tabs.
   const tx = db.transaction(['desktops', 'groups', 'settings'], 'readwrite')
   if (!(await tx.objectStore('settings').get('initialized'))) {
@@ -110,5 +116,4 @@ export async function openLocalDatabase(name = DATABASE_NAME): Promise<LocalData
     await store.put({ key: 'base', snapshot: null })
   }
   await sync.done
-  return db
 }

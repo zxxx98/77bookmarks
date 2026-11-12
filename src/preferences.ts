@@ -1,21 +1,18 @@
-/** A synchronous UI cache, mirrored to Chrome's persistent local extension storage. */
+import { platform } from './platform'
+
+/** A synchronous UI cache; the platform may mirror it somewhere more durable. */
 const KEYS = ['theme', 'style', 'search_engine', 'todo-panel'] as const
-const extension = () => typeof chrome !== 'undefined' && !!chrome.runtime?.id
 export const preferences = {
   setItem(key: string, value: string) {
     localStorage.setItem(key, value)
-    if (extension()) void chrome.storage.local.set({ [`ui:${key}`]: value }).catch(() => undefined)
+    platform.preferences.mirror(key, value)
   },
   removeItem(key: string) {
     localStorage.removeItem(key)
-    if (extension()) void chrome.storage.local.remove(`ui:${key}`).catch(() => undefined)
+    platform.preferences.mirror(key, null)
   },
 }
-export async function hydratePreferences() {
-  if (!extension()) return
-  const values = await chrome.storage.local.get(null)
-  for (const [key, value] of Object.entries(values)) if (key.startsWith('ui:') && typeof value === 'string') localStorage.setItem(key.slice(3), value)
-}
+export const hydratePreferences = () => platform.preferences.hydrate()
 export function exportPreferences(): Record<string, string> {
   return Object.fromEntries(KEYS.flatMap((key) => { const value = localStorage.getItem(key); return value === null ? [] : [[key, value]] }))
 }

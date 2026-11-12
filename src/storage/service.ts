@@ -32,10 +32,27 @@ export function validateIcon(dataUrl: string): string {
   return dataUrl
 }
 
-/** All writes are atomic IndexedDB transactions, with no network work inside a transaction. */
+/** Chrome's own favicon cache needs no access to arbitrary websites. */
+async function cachedFavicon(origin: string): Promise<string | null> {
+  if (typeof chrome === 'undefined' || !chrome.runtime?.id) return null
+  const favicon = new URL(chrome.runtime.getURL('/_favicon/'))
+  favicon.searchParams.set('pageUrl', origin)
+  favicon.searchParams.set('size', '64')
+  const response = await fetch(favicon)
+  if (!response.ok) return null
+  const bytes = new Uint8Array(await response.arrayBuffer())
+  return bytes.length && bytes.length <= MAX_ICON_BYTES ? `data:image/png;base64,${btoa(String.fromCharCode(...bytes))}` : null
+}
+
+export interface ServiceOptions {
+  /** Finds a site's own icon as a data URL; where it looks is up to the edition running the service */
+  fetchIcon: (origin: string) => Promise<string | null>
+}
+
+/** All writes are atomic database transactions, with no network work inside a transaction. */
 export class LocalService {
   private database: Promise<LocalDatabase> | undefined
-  constructor(private open: () => Promise<LocalDatabase> = openLocalDatabase) {}
+  constructor(private open: () => Promise<LocalDatabase> = openLocalDatabase, private options: ServiceOptions = { fetchIcon: cachedFavicon }) {}
   private db() { return this.database ??= this.open().catch((error) => { this.database = undefined; throw error }) }
   private async write<T>(run: (tx: WriteTransaction) => Promise<T>): Promise<T> {
     const db = await this.db()
@@ -388,19 +405,10 @@ export class LocalService {
     if (source.url && !url) throw new Error('无效的图片地址')
     if (!dataUrl && !url) {
       const site = requireRow(await (await this.db()).get('sites', id), '卡片')
-      // Chrome's own favicon cache needs no access to arbitrary websites.
-      if (typeof chrome !== 'undefined' && chrome.runtime?.id) {
-        const favicon = new URL(chrome.runtime.getURL('/_favicon/'))
-        favicon.searchParams.set('pageUrl', site.origin)
-        favicon.searchParams.set('size', '64')
-        try {
-          const response = await fetch(favicon)
-          if (response.ok) {
-            const bytes = new Uint8Array(await response.arrayBuffer())
-            if (bytes.length && bytes.length <= MAX_ICON_BYTES) dataUrl = validateIcon(`data:image/png;base64,${btoa(String.fromCharCode(...bytes))}`)
-          }
-        } catch { /* An unavailable icon falls back to a letter. */ }
-      }
+      try {
+        const found = await this.options.fetchIcon(site.origin)
+        if (found) dataUrl = validateIcon(found)
+      } catch { /* An unavailable icon falls back to a letter. */ }
       if (!dataUrl) throw new Error('没有可用的缓存图标，可以上传图片或填写图标地址')
     }
     return this.write(async (tx) => {

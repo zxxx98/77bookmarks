@@ -1,7 +1,7 @@
 import { LocalService, READ_METHODS, SERVICE_METHODS, type ServiceMethod } from '../src/storage/service'
-import { DATA_CHANGED, DATA_MESSAGE, SYNC_MESSAGE } from '../src/storage/client'
+import { DATA_CHANGED, DATA_MESSAGE, SYNC_MESSAGE, TITLE_MESSAGE } from '../src/storage/messages'
 import { SYNC_METHODS, runSyncMethod } from '../src/sync/control'
-import { fetchTitleHtml, TITLE_MESSAGE } from '../src/page-title'
+import { fetchTitleHtml } from '../src/title-fetch'
 import { parseBookmarkUrl } from '../shared/url'
 
 const service = new LocalService()
