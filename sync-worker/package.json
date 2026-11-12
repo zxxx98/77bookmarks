@@ -1,0 +1,27 @@
+{
+  "name": "77bookmarks-sync",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "wrangler d1 migrations apply DB --remote"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261112.1",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.0.0"
+  },
+  "cloudflare": {
+    "bindings": {
+      "DB": {
+        "description": "保存同步快照和最近 10 个版本；每个部署供一个用户的设备共用。"
+      },
+      "SYNC_TOKEN": {
+        "description": "生成至少 32 字符的随机令牌（建议 `openssl rand -hex 32`），并在每台设备的云同步设置中填写同一个令牌。"
+      }
+    }
+  }
+}

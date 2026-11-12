@@ -1,7 +1,9 @@
 import type { LocalService, ServiceMethod } from './service'
+import { runSyncMethod, type SyncMethod, type SyncResults } from '../sync/control'
 
 export const DATA_MESSAGE = '77bookmarks:data'
 export const DATA_CHANGED = '77bookmarks:changed'
+export const SYNC_MESSAGE = '77bookmarks:sync'
 export const isExtension = () => typeof chrome !== 'undefined' && !!chrome.runtime?.id
 let previewService: Promise<LocalService> | undefined
 let channel: BroadcastChannel | undefined
@@ -29,6 +31,29 @@ export async function call<K extends ServiceMethod>(method: K, ...args: Paramete
     previewChannel()?.postMessage(DATA_CHANGED)
   }
   return result as Awaited<ReturnType<LocalService[K]>>
+}
+
+/**
+ * Cloud-sync requests are separate from data requests because they do network work:
+ * in the extension they are answered by the background worker, and in the preview by
+ * an engine running in the page itself.
+ */
+export async function syncCall<K extends SyncMethod>(method: K, ...args: unknown[]): Promise<SyncResults[K]> {
+  if (isExtension()) {
+    const response = await chrome.runtime.sendMessage({ type: SYNC_MESSAGE, method, args })
+    if (!response?.ok) throw new Error(response?.error ?? '云同步不可用，请重新加载扩展')
+    // The worker announces the data change; the page only needs its own copy refreshed
+    if (response.changed) window.dispatchEvent(new Event(DATA_CHANGED))
+    return response.value
+  }
+  const { LocalService } = await import('./service')
+  const service = await (previewService ??= Promise.resolve(new LocalService()))
+  const { value, changed } = await runSyncMethod(service, method, args)
+  if (changed) {
+    window.dispatchEvent(new Event(DATA_CHANGED))
+    previewChannel()?.postMessage(DATA_CHANGED)
+  }
+  return value as SyncResults[K]
 }
 
 export function onDataChanged(listener: () => void): () => void {

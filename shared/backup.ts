@@ -1,3 +1,4 @@
+import { parseClickCounts, totalClicks, type ClickCounts } from './counters'
 import { isView, MAX_TODO_LENGTH, type View } from './types'
 import { isLayoutColumns, MAX_SITE_NAME_LENGTH, type SystemSettings } from './settings'
 import { parseBookmarkUrl, parseIconUrl } from './url'
@@ -7,6 +8,7 @@ export interface BackupMetadata {
   createdAt?: number
   updatedAt?: number
   clicks?: number
+  clickCounts?: ClickCounts
   lastClickedAt?: number | null
 }
 
@@ -76,6 +78,12 @@ function metadata(input: Json): BackupMetadata {
     if (key === 'lastClickedAt' && value === null) { result[key] = null; continue }
     if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) throw new Error('备份中的统计或时间格式无效')
     result[key] = value
+  }
+  if (input.clickCounts !== undefined) {
+    const counts = parseClickCounts(input.clickCounts)
+    if (!counts || (result.clicks !== undefined && totalClicks(counts) !== result.clicks)) throw new Error('备份中的点击计数无效')
+    result.clickCounts = counts
+    result.clicks = totalClicks(counts)
   }
   return result
 }

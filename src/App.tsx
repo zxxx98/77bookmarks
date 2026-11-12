@@ -58,6 +58,12 @@ export default function App() {
     document.title = siteName
   }, [siteName])
 
+  useEffect(() => {
+    // New tabs pull remote edits through the single background engine. Disabled sync
+    // returns immediately without making network requests.
+    void api.syncStatus().then(({ config }) => { if (config.enabled) return api.syncNow() }).catch(() => undefined)
+  }, [])
+
   useEffect(() => onDataChanged(() => {
     // Another tab, the toolbar popup or the context menu may have changed local data.
     for (const key of ['board', 'board-search', 'todos', 'usage', 'settings']) {

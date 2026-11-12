@@ -20,7 +20,9 @@ it('initializes and persists local data without crypto.randomUUID in HTTP previe
     const records = (await Promise.all(stores.map((store) => db.getAll(store)))).flat()
     expect(records).toHaveLength(5)
     expect(new Set(records.map((row) => row.syncId)).size).toBe(records.length)
-    for (const row of records) expect(row.syncId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+    expect(records.filter((row) => 'view' in row)[0].syncId).toBe('d-default')
+    expect(records.filter((row) => 'pinned' in row)[0].syncId).toBe('g-default')
+    for (const row of records.filter((row) => !('view' in row) && !('pinned' in row))) expect(row.syncId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
 
     db.close()
     const reopened = await openLocalDatabase(name)

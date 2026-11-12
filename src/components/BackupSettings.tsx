@@ -128,7 +128,7 @@ export function BackupSettings({ onClose, desktops, desktop, onImported, onBusyC
         </div>
       </section>
 
-      <p className="text-xs leading-relaxed text-faint">数据仅保存在当前浏览器的此个人资料中。请定期导出备份；卸载扩展会清除本地数据。云同步尚未提供。</p>
+      <p className="text-xs leading-relaxed text-faint">数据默认只保存在当前浏览器的此个人资料中。请定期导出备份；卸载扩展会清除本地数据。需要多台设备共用时，可在「云同步」里配置自己的服务器。</p>
       <section className="border-t border-line pt-4">
         <h3 className="label">导入</h3>
         <input ref={fileInput} type="file" accept="application/json,.json" disabled={importBusy} hidden onChange={chooseFile} />

@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS snapshots (
+  version INTEGER PRIMARY KEY,
+  body TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);

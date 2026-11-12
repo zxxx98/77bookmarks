@@ -2,8 +2,9 @@ import { exportPreferences, restorePreferences } from './preferences'
 import type { SystemSettings } from '../shared/settings'
 import type { BackupDesktop } from '../shared/backup'
 import type { ClickTarget, ImportMode, OrderInput, View } from '../shared/types'
+import type { SyncConfig } from './sync/types'
 import { rememberSettings } from './settings'
-import { call } from './storage/client'
+import { call, syncCall } from './storage/client'
 
 /** The UI talks only to this local data boundary; future sync belongs behind it. */
 export const api = {
@@ -47,4 +48,9 @@ export const api = {
     return result
   },
   importChrome: (desktop: BackupDesktop) => call('importChrome', desktop),
+  // Cloud sync is optional and off until it is configured; no request is made otherwise.
+  syncStatus: () => syncCall('status'),
+  updateSyncConfig: (patch: Partial<SyncConfig>) => syncCall('configure', patch),
+  testSync: (config: SyncConfig) => syncCall('test', config),
+  syncNow: () => syncCall('now', true),
 }

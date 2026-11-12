@@ -1,6 +1,6 @@
 {
   "name": "77bookmarks",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,8 @@
     "preview": "vite preview --host 0.0.0.0 --port 8788",
     "typecheck": "tsc --noEmit -p .",
     "test": "vitest run",
-    "test:extension": "npm run build && node scripts/test-extension.mjs"
+    "test:extension": "npm run build && node scripts/test-extension.mjs",
+    "test:sync:extension": "npm run build && node scripts/test-sync-extension.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

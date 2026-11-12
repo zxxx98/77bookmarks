@@ -1,0 +1,2 @@
+# Generate your own value: openssl rand -hex 32 (at least 32 characters).
+SYNC_TOKEN=replace-with-your-random-token

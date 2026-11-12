@@ -1,8 +1,13 @@
+import { clickCountsOf, totalClicks, type ClickCounts } from '../../shared/counters'
 import { backupStats, parseBackup, type BackupDesktop, type BackupSite } from '../../shared/backup'
 import { DEFAULT_SETTINGS, isLayoutColumns, MAX_SITE_NAME_LENGTH, type SystemSettings } from '../../shared/settings'
+import { DEFAULT_DESKTOP_SYNC_ID, DEFAULT_GROUP_SYNC_ID, mergeSnapshots, snapshotFingerprint, type MergeStats, type SyncSnapshot } from '../../shared/sync'
 import { MAX_TODO_LENGTH, isView, type AddResult, type BoardPage, type ClickTarget, type Desktop, type ImportMode, type ImportResult, type OrderInput, type UsageStats, type View } from '../../shared/types'
 import { fallbackLinkTitle, hostOf, parseBookmarkUrl, parseIconUrl } from '../../shared/url'
-import { changed, entity, openLocalDatabase, sorted, STORES, type DesktopRow, type Entity, type GroupRow, type LinkRow, type LocalDatabase, type SiteRow, type TodoRow, type WriteTransaction } from './db'
+import { EMPTY_SYNC_CONFIG, EMPTY_SYNC_STATE, isSyncKind, type SyncConfig, type SyncState, type SyncStatus } from '../sync/types'
+import { changed, entity, openLocalDatabase, sorted, STORES, SYNC_STORE, type DesktopRow, type Entity, type GroupRow, type LinkRow, type LocalDatabase, type SettingsRow, type SiteRow, type SyncTransaction, type TodoRow, type WriteTransaction } from './db'
+import { applySnapshot, buildSnapshot, snapshotOf } from './sync-snapshot'
+import { deriveSyncId } from './uuid'
 
 const MAX_DESKTOPS = 20
 const MAX_ICON_BYTES = 100 * 1024
@@ -45,6 +50,40 @@ export class LocalService {
       await settled
       throw error
     }
+  }
+  /** Same as write(), plus the store holding the sync ancestor and the cloud settings */
+  private async writeSync<T>(run: (tx: SyncTransaction) => Promise<T>): Promise<T> {
+    const db = await this.db()
+    const tx = db.transaction([...STORES, SYNC_STORE] as [...typeof STORES, typeof SYNC_STORE], 'readwrite')
+    const settled = tx.done.catch(() => undefined)
+    try {
+      const result = await run(tx)
+      await tx.done
+      return result
+    } catch (error) {
+      try { tx.abort() } catch { /* Already aborted. */ }
+      await settled
+      throw error
+    }
+  }
+  private async syncRecords() {
+    const tx = (await this.db()).transaction(SYNC_STORE, 'readonly')
+    const [device, config, state, base] = await Promise.all([
+      tx.objectStore('sync').get('device'), tx.objectStore('sync').get('config'),
+      tx.objectStore('sync').get('state'), tx.objectStore('sync').get('base'),
+    ])
+    await tx.done
+    return {
+      deviceId: (device as { deviceId?: string } | undefined)?.deviceId ?? '',
+      config: (config as { config?: SyncConfig } | undefined)?.config ?? EMPTY_SYNC_CONFIG,
+      state: (state as { state?: SyncState } | undefined)?.state ?? EMPTY_SYNC_STATE,
+      base: (base as { snapshot?: SyncSnapshot | null } | undefined)?.snapshot ?? null,
+    }
+  }
+  /** The desktop a new bookmark lands in, resolved before the write starts */
+  private async targetDesktop(id: number): Promise<DesktopRow> {
+    const desktops = sorted(await (await this.db()).getAll('desktops'))
+    return requireRow(desktops.find((row) => row.id === id) ?? desktops[0], '桌面')
   }
   private async rows() {
     const db = await this.db()
@@ -97,7 +136,11 @@ export class LocalService {
     const siteName = nameOf(settings.siteName, MAX_SITE_NAME_LENGTH)
     if (typeof settings.openInNewTab !== 'boolean' || !isLayoutColumns(settings.layoutColumns)) throw new Error('无效的设置')
     const value = { siteName, openInNewTab: settings.openInNewTab, layoutColumns: settings.layoutColumns }
-    await this.write(async (tx) => { await tx.objectStore('settings').put({ key: 'system', value }) })
+    await this.write(async (tx) => {
+      // Settings carry their own modification time so that the newer side wins when syncing
+      const previous = await tx.objectStore('settings').get('system')
+      await tx.objectStore('settings').put({ key: 'system', value, updatedAt: Math.max(Date.now(), (previous?.updatedAt ?? 0) + 1) })
+    })
     return value
   }
   private async firstGroup(tx: WriteTransaction, desktopId: number) {
@@ -173,6 +216,14 @@ export class LocalService {
     const parsed = parseBookmarkUrl(url)
     if (!parsed) throw new Error('无效的网址')
     const icon = iconDataUrl ? validateIcon(iconDataUrl) : null
+    // Card and link identities come from their natural keys (desktop + origin, card + path),
+    // so the same bookmark added on another device while offline becomes the same record
+    // instead of a second one. Both are computed before the transaction: WebCrypto cannot
+    // be awaited inside an IndexedDB transaction.
+    const desktop = await this.targetDesktop(desktopId)
+    const known = await (await this.db()).getFromIndex('sites', 'origin', [desktop.id, parsed.origin])
+    const siteSyncId = known?.syncId ?? await deriveSyncId('s', desktop.syncId, parsed.origin)
+    const linkSyncId = parsed.path ? await deriveSyncId('l', siteSyncId, parsed.path) : null
     return this.write(async (tx) => {
       const desktops = sorted(await tx.objectStore('desktops').getAll())
       const desktop = requireRow(desktops.find((d) => d.id === desktopId) ?? desktops[0], '桌面')
@@ -183,12 +234,12 @@ export class LocalService {
       if (!site) {
         const requested = groupId ? await tx.objectStore('groups').get(groupId) : undefined
         const target = requested?.desktopId === desktop.id ? requested.id : await this.firstGroup(tx, desktop.id)
-        const row = { ...entity(await this.next(tx, 'sites')), ...stats(), desktopId: desktop.id, groupId: target, origin: parsed.origin, title: (title && !parsed.path ? title.trim() : hostOf(parsed.origin)).slice(0, 80), iconVersion: icon ? Date.now() : 0, iconUrl: null } as SiteRow
+        const row = { ...entity(await this.next(tx, 'sites')), syncId: siteSyncId, ...stats(), desktopId: desktop.id, groupId: target, origin: parsed.origin, title: (title && !parsed.path ? title.trim() : hostOf(parsed.origin)).slice(0, 80), iconVersion: icon ? Date.now() : 0, iconUrl: null } as SiteRow
         const id = await tx.objectStore('sites').add(row)
         site = { ...row, id }
         if (icon) await tx.objectStore('icons').put({ siteId: id, dataUrl: icon })
       }
-      if (parsed.path) await tx.objectStore('links').add({ ...entity(await this.next(tx, 'links')), ...stats(), siteId: site.id, path: parsed.path, title: (title?.trim() || fallbackLinkTitle(parsed.path)).slice(0, 80) } as LinkRow)
+      if (parsed.path && linkSyncId) await tx.objectStore('links').add({ ...entity(await this.next(tx, 'links')), syncId: linkSyncId, ...stats(), siteId: site.id, path: parsed.path, title: (title?.trim() || fallbackLinkTitle(parsed.path)).slice(0, 80) } as LinkRow)
       return { result: parsed.path ? (existed ? 'link_added' : 'site_created') : 'site_created', siteId: site.id, siteTitle: site.title }
     })
   }
@@ -283,13 +334,22 @@ export class LocalService {
     })
   }
   async recordClick(target: ClickTarget) {
-    return this.write(async (tx) => {
+    return this.writeSync(async (tx) => {
+      const device = await tx.objectStore('sync').get('device')
+      const deviceId = device?.key === 'device' ? device.deviceId : 'unknown'
+      const clicked = <T extends { clicks: number; clickCounts?: ClickCounts }>(row: T) => {
+        const clickCounts = { ...clickCountsOf(row) }
+        clickCounts[deviceId] = Math.min(Number.MAX_SAFE_INTEGER, (clickCounts[deviceId] ?? 0) + 1)
+        return { ...row, clickCounts, clicks: totalClicks(clickCounts), lastClickedAt: Date.now() }
+      }
+      // Opening a bookmark is merged as a counter, so it deliberately leaves updatedAt
+      // alone: a click must not make this record win a later edit conflict.
       if ('linkId' in target) {
         const row = await tx.objectStore('links').get(target.linkId)
-        if (row) await tx.objectStore('links').put(changed(row, { clicks: row.clicks + 1, lastClickedAt: Date.now() }))
+        if (row) await tx.objectStore('links').put(clicked(row))
       } else {
         const row = await tx.objectStore('sites').get(target.siteId)
-        if (row) await tx.objectStore('sites').put(changed(row, { clicks: row.clicks + 1, lastClickedAt: Date.now() }))
+        if (row) await tx.objectStore('sites').put(clicked(row))
       }
       return ok
     })
@@ -324,7 +384,10 @@ export class LocalService {
       const row = requireRow(await tx.objectStore('sites').get(id), '卡片')
       if (dataUrl) await tx.objectStore('icons').put({ siteId: id, dataUrl })
       else await tx.objectStore('icons').delete(id)
-      await tx.objectStore('sites').put(changed(row, { iconUrl: url, iconVersion: dataUrl ? Math.max(Date.now(), row.iconVersion + 1) : 0 }))
+      const iconVersion = dataUrl ? Math.max(Date.now(), row.iconVersion + 1) : 0
+      // Only the custom address travels to other devices, so caching a picture here
+      // leaves the modification time alone.
+      await tx.objectStore('sites').put({ ...row, iconUrl: url, iconVersion, updatedAt: url === row.iconUrl ? row.updatedAt : Math.max(Date.now(), row.updatedAt + 1) })
       return { ...ok, iconUrl: url }
     })
   }
@@ -332,7 +395,7 @@ export class LocalService {
     return this.write(async (tx) => {
       const row = requireRow(await tx.objectStore('sites').get(id), '卡片')
       await tx.objectStore('icons').delete(id)
-      await tx.objectStore('sites').put(changed(row, { iconUrl: null, iconVersion: -1 }))
+      await tx.objectStore('sites').put({ ...row, iconUrl: null, iconVersion: -1, updatedAt: row.iconUrl === null ? row.updatedAt : Math.max(Date.now(), row.updatedAt + 1) })
       return ok
     })
   }
@@ -344,7 +407,7 @@ export class LocalService {
     if (desktopId !== undefined && !desktops.some((d) => d.id === desktopId)) throw new Error('桌面不存在')
     const iconMap = new Map(icons.map((i) => [i.siteId, i.dataUrl]))
     const full = desktopId === undefined
-    const metadata = (row: Entity & { clicks?: number; lastClickedAt?: number | null }) => full ? { syncId: row.syncId, createdAt: row.createdAt, updatedAt: row.updatedAt, ...(row.clicks !== undefined ? { clicks: row.clicks, lastClickedAt: row.lastClickedAt } : {}) } : {}
+    const metadata = (row: Entity & { clicks?: number; clickCounts?: ClickCounts; lastClickedAt?: number | null }) => full ? { syncId: row.syncId, createdAt: row.createdAt, updatedAt: row.updatedAt, ...(row.clicks !== undefined ? { clicks: row.clicks, clickCounts: clickCountsOf({ clicks: row.clicks, clickCounts: row.clickCounts }), lastClickedAt: row.lastClickedAt } : {}) } : {}
     const backup = {
       version: full ? 3 : 2,
       exportedAt: new Date().toISOString(),
@@ -390,12 +453,102 @@ export class LocalService {
     return mode === 'replace' ? { ...base, syncId: source.syncId ?? base.syncId, createdAt: source.createdAt ?? base.createdAt, updatedAt: source.updatedAt ?? base.updatedAt } : base
   }
   private async importSite(tx: WriteTransaction, desktopId: number, groupId: number, s: BackupSite, position: number, mode: ImportMode) {
-    const siteId = await tx.objectStore('sites').add({ ...this.importEntity(s, mode), ...stats(), clicks: s.clicks ?? 0, lastClickedAt: s.lastClickedAt ?? null, position, desktopId, groupId, origin: s.origin, title: s.title, iconUrl: s.iconUrl ?? null, iconVersion: s.icon ? Date.now() : 0 } as SiteRow)
+    const siteId = await tx.objectStore('sites').add({ ...this.importEntity(s, mode), ...stats(), clicks: s.clicks ?? 0, ...(s.clickCounts ? { clickCounts: s.clickCounts } : {}), lastClickedAt: s.lastClickedAt ?? null, position, desktopId, groupId, origin: s.origin, title: s.title, iconUrl: s.iconUrl ?? null, iconVersion: s.icon ? Date.now() : 0 } as SiteRow)
     if (s.icon) await tx.objectStore('icons').put({ siteId, dataUrl: `data:${s.icon.type};base64,${s.icon.data}` })
-    for (const [linkPosition, l] of s.links.entries()) await tx.objectStore('links').add({ ...this.importEntity(l, mode), ...stats(), clicks: l.clicks ?? 0, lastClickedAt: l.lastClickedAt ?? null, position: linkPosition, siteId, path: l.path, title: l.title } as LinkRow)
+    for (const [linkPosition, l] of s.links.entries()) await tx.objectStore('links').add({ ...this.importEntity(l, mode), ...stats(), clicks: l.clicks ?? 0, ...(l.clickCounts ? { clickCounts: l.clickCounts } : {}), lastClickedAt: l.lastClickedAt ?? null, position: linkPosition, siteId, path: l.path, title: l.title } as LinkRow)
   }
   async importChrome(desktop: BackupDesktop) {
     return this.importBackup({ version: 2, desktops: [desktop] }, 'append')
+  }
+
+  /** What the settings page and the sync engine need to know about the cloud copy */
+  async syncStatus(): Promise<SyncStatus> {
+    const { deviceId, config, state, base } = await this.syncRecords()
+    const snapshot = await buildSnapshot(await this.db(), deviceId)
+    return {
+      config, state, deviceId,
+      synced: base !== null,
+      dirty: base === null || snapshotFingerprint(snapshot) !== snapshotFingerprint(base),
+    }
+  }
+  async updateSyncConfig(patch: Partial<SyncConfig>): Promise<SyncConfig> {
+    return this.writeSync(async (tx) => {
+      const stored = await tx.objectStore('sync').get('config')
+      const previous = (stored as { config?: SyncConfig } | undefined)?.config ?? EMPTY_SYNC_CONFIG
+      const kind = patch.kind ?? previous.kind
+      if (!isSyncKind(kind)) throw new Error('无效的同步方式')
+      const endpoint = (patch.endpoint ?? previous.endpoint).trim().slice(0, 500)
+      if (endpoint) {
+        let url: URL
+        try { url = new URL(endpoint) } catch { throw new Error('无效的同步地址') }
+        if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error('请填写不含账号、查询参数或片段的 HTTP(S) 地址')
+      }
+      const value: SyncConfig = {
+        enabled: patch.enabled ?? previous.enabled,
+        kind,
+        endpoint,
+        token: (patch.token ?? previous.token).trim().slice(0, 500),
+        username: (patch.username ?? previous.username).trim().slice(0, 200),
+        password: (patch.password ?? previous.password).slice(0, 500),
+      }
+      if (value.enabled && (!value.endpoint || !(kind === 'worker' ? value.token : value.username))) {
+        throw new Error(kind === 'worker' ? '请填写 Worker 地址和同步令牌' : '请填写 WebDAV 地址和用户名')
+      }
+      if (previous.kind !== value.kind || previous.endpoint !== value.endpoint || previous.username !== value.username) {
+        await tx.objectStore('sync').put({ key: 'base', snapshot: null })
+        await tx.objectStore('sync').put({ key: 'state', state: EMPTY_SYNC_STATE })
+      }
+      await tx.objectStore('sync').put({ key: 'config', config: value })
+      return value
+    })
+  }
+  /**
+   * Merges the cloud copy into the local database in one transaction and returns the
+   * resulting local state, which the caller uploads. The common ancestor advances to the
+   * version that was just merged, so an upload that fails loses nothing and the next run
+   * still compares against the right version.
+   */
+  async mergeRemote(remote: SyncSnapshot | null): Promise<{ snapshot: SyncSnapshot; stats: MergeStats }> {
+    return this.writeSync(async (tx) => {
+      const read = async () => {
+        const [desktops, groups, sites, links, todos, settings] = await Promise.all([
+          tx.objectStore('desktops').getAll(), tx.objectStore('groups').getAll(), tx.objectStore('sites').getAll(),
+          tx.objectStore('links').getAll(), tx.objectStore('todos').getAll(), tx.objectStore('settings').getAll(),
+        ])
+        return { desktops, groups, sites, links, todos, settings }
+      }
+      const store = tx.objectStore('sync')
+      const [deviceRecord, baseRecord] = await Promise.all([store.get('device'), store.get('base')])
+      const deviceId = (deviceRecord as { deviceId?: string } | undefined)?.deviceId ?? ''
+      const base = (baseRecord as { snapshot?: SyncSnapshot | null } | undefined)?.snapshot ?? null
+      let local = snapshotOf(await read(), deviceId)
+      const pristine = !base && remote && local.desktops.length === 1 && local.groups.length === 1
+        && local.desktops[0].syncId === DEFAULT_DESKTOP_SYNC_ID && local.desktops[0].updatedAt === 0
+        && local.groups[0].syncId === DEFAULT_GROUP_SYNC_ID && local.groups[0].updatedAt === 0
+        && !local.sites.length && !local.links.length && !local.todos.length && local.settings.updatedAt === 0
+      if (pristine) local = { ...remote, deviceId }
+      const { snapshot, stats } = mergeSnapshots(pristine ? remote : remote ? base : null, local, remote ?? local)
+      await applySnapshot(tx, snapshot)
+      await store.put({ key: 'base', snapshot: remote })
+      // Rebuilt from the records that were actually written, so the upload matches the database
+      return { snapshot: snapshotOf(await read(), deviceId), stats }
+    })
+  }
+  /** Records the outcome of a sync run; a successful upload moves the common ancestor forward */
+  async recordSyncResult(result: { pushed?: SyncSnapshot; stats?: MergeStats; error?: string }): Promise<SyncState> {
+    return this.writeSync(async (tx) => {
+      const store = tx.objectStore('sync')
+      const stored = await store.get('state')
+      const previous = (stored as { state?: SyncState } | undefined)?.state ?? EMPTY_SYNC_STATE
+      const state: SyncState = {
+        lastSyncAt: result.error ? previous.lastSyncAt : Date.now(),
+        lastResult: result.stats ?? previous.lastResult,
+        lastError: result.error ?? null,
+      }
+      await store.put({ key: 'state', state })
+      if (result.pushed) await store.put({ key: 'base', snapshot: result.pushed })
+      return state
+    })
   }
 }
 

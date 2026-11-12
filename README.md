@@ -63,8 +63,10 @@ npm run build:extension
 | `activeTab` | 用户触发收藏时读取当前页面网址与标题 |
 | `scripting` | 用户触发收藏后在页面显示结果提示 |
 | `favicon` | 读取浏览器缓存的网站图标 |
+| `alarms` | 启用同步后延迟上传和每 15 分钟检查云端 |
+| 可选站点权限 | 用户在设置中授权后访问指定 WebDAV 服务器 |
 
-不申请所有网站的永久访问权限，不读取浏览历史，不上传书签内容。填写远程图标地址后，浏览器会向该地址请求图片。
+不读取浏览历史。云同步默认关闭；关闭时不发起同步请求。仅在主动启用同步后，将下述同步数据上传到你配置的服务器。WebDAV 的站点访问权限按需申请。填写远程图标地址后，浏览器会向该地址请求图片。
 
 ## 备份与恢复
 
@@ -80,6 +82,51 @@ npm run build:extension
 支持导入 v1/v2 书签备份，恢复文件中的桌面、分组、视图、置顶、卡片、链接及图标。这类文件不包含待办、系统设置和统计。
 
 同一页面还支持导入 Chrome / Edge 导出的书签 HTML：在浏览器书签管理器里导出文件，选择后预览数量，导入为一个新桌面。嵌套文件夹成为分组，相同网站合并为一张卡片，非网页地址会跳过。
+
+## 云同步（可选）
+
+在「更多 → 系统设置 → 云同步」配置，默认关闭。支持 **Cloudflare Worker + D1** 和 **WebDAV**。每台设备填写相同的服务器地址和凭据，勾选启用并保存；也可先点击「测试连接」。
+
+- 同步桌面、分组、卡片、子链接、待办、点击统计和系统设置；主题、搜索引擎等偏好保留在各端。
+- 图标图片和缓存状态不上传，各端按需从浏览器 favicon 缓存获取。自定义图标的网络地址会随卡片同步；上传的图片只留在本机及完整备份。
+- 默认主桌面、默认分组使用固定同步标识；新卡片按「桌面同步标识 + origin（含协议和端口）」派生 SHA-256 标识，子链接按「卡片同步标识 + 路径」派生。同一网站可以存在于不同桌面。无 WebCrypto 的 HTTP 预览回退为随机标识，合并时仍会去重。
+- 首次连接合并两边数据；后续按上次同步底稿做三方合并，识别删除。不同字段的修改可同时保留，同一字段冲突取修改时间较晚的一侧；修改与删除冲突时保留修改。点击计数按设备记录并合并，断网重试或上传响应丢失不会重复累加；备份保留计数来源，只有总数的历史导入取较大值。
+- 扩展在浏览器启动、打开新标签页、本地改动约 30 秒后及每 15 分钟检查同步。断网时保留本地修改，下次触发自动重试。浏览器预览仅支持打开页面和手动同步，不运行扩展后台定时任务。
+- 凭据仅保存在本机，不进入备份或同步快照。数据通过服务器保存，**未做端到端加密**；建议使用 HTTPS。每个 Worker 部署或 WebDAV 文件供同一用户的设备共用，不同用户应使用独立部署或目录。
+
+### Cloudflare Worker + D1 一键部署
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https%3A%2F%2Fgithub.com%2Fzxxx98%2F77bookmarks%2Ftree%2Fmain%2Fsync-worker)
+
+1. 点击按钮，登录 Cloudflare 并授权 GitHub。模板会复制独立的 `sync-worker/`，自动创建并绑定 D1 数据库 `DB`。
+2. 在部署页面填写 **`SYNC_TOKEN`**：使用至少 32 字符的随机令牌，推荐执行 `openssl rand -hex 32` 生成。保存该令牌，所有设备需填写相同值；不要使用示例占位值。
+3. 完成部署，复制 `https://77bookmarks-sync.<你的账号>.workers.dev`。在扩展云同步中选择 Cloudflare Worker，填写该地址（不带 `/v1/snapshot`）和令牌，启用并保存。数据库表会在首次请求时自动建立，无需手动执行 SQL。
+
+按钮以公开仓库 `main` 上的 `sync-worker/` 为模板；本地开发中的变更需要先发布到仓库，按钮才会包含这些变更。Cloudflare 页面如未提示填写令牌，请在 Worker 的「Settings → Variables and Secrets」新增 Secret `SYNC_TOKEN` 后重新部署。
+
+命令行部署（Node.js 22 或更新版本）：
+
+```bash
+cd sync-worker
+npm ci
+npx wrangler login
+npm run deploy              # 首次按提示创建 D1，并将实际 database_id 写入配置
+npx wrangler secret put SYNC_TOKEN
+```
+
+如需手动执行迁移，可运行 `npm run db:migrate`。本地调试先将 `.dev.vars.example` 复制为 `.dev.vars`，填入自己的令牌，再运行 `npm run dev`。不要提交 `.dev.vars`。
+
+Worker 使用带版本号的条件写入，冲突时客户端重新拉取合并；保留最近 **10** 份快照，每份最多 **4 MB**（UTF-8 字节）。`GET /v1/history` 可查看版本，`GET /v1/snapshot?version=版本号` 可取回历史快照，均需 `Authorization: Bearer <SYNC_TOKEN>`。恢复时先停用所有设备同步，将取回的 `{snapshot}` 使用当前版本的 `If-Match` 写回 `PUT /v1/snapshot`；再启用各端同步。云端留存不能替代完整备份。
+
+### WebDAV
+
+1. 在坚果云、Nextcloud 或 NAS 中先创建同步目录，建议使用专用应用密码。
+2. 在云同步中选择 WebDAV，填写目录完整地址、账号和密码。例如 `https://dav.jianguoyun.com/dav/77bookmarks/`。
+3. 在扩展中点击「授权访问」，只授予该服务器的站点权限，再启用并保存。目录内会生成 `77bookmarks-sync.json`，也可直接填写 JSON 文件的地址。
+
+服务器必须为同步文件提供**强 ETag**，并正确支持 `If-Match` / `If-None-Match` 条件写入；否则客户端会报错并停止，避免多设备并发覆盖。初次创建文件也使用条件写入。部分服务器或反向代理会移除 ETag，需要先调整配置，或改用 Worker。测试连接只验证读取权限，首次同步才验证创建、写入权限。
+
+WebDAV 通常不提供浏览器跨域支持，建议在已安装的扩展中使用。HTTP 界面预览访问 WebDAV 时，服务器还需允许该预览来源、`Authorization` / 条件请求头，并暴露 `ETag`；Worker 已包含所需 CORS 配置。
 
 ## 快捷操作
 
@@ -113,8 +160,12 @@ HTTP 预览直接使用同一套 IndexedDB 数据服务，只供界面开发。�
 ```bash
 npx playwright install chromium  # 首次安装测试用浏览器
 npm run test:extension            # 先构建，再在临时浏览器资料中测试
+npm ci --prefix sync-worker
+npm run test:sync:extension       # 两个扩展资料 + 本地真实 Worker/D1 + WebDAV 条件写入
 ```
 
 也可用 `CHROME_PATH=/path/to/chrome npm run test:extension` 指定兼容的 Chromium。测试覆盖 Manifest V3 CSP、断网操作、多标签页并发与刷新、新标签页入口、收藏弹窗、JSON 完整备份恢复、Chrome HTML 导入、后台重启和浏览器重启，结果截图与备份写入忽略提交的 `artifacts/`。
 
-目录：`src/` 为 React 界面，`src/storage/` 为本地数据层，`shared/` 为类型与备份校验，`extension/` 为扩展入口、弹窗和 Manifest，`scripts/` 为打包与浏览器检查。
+后端独立验证：`npm ci --prefix sync-worker`、`npm run typecheck --prefix sync-worker`、`npm run deploy --prefix sync-worker -- --dry-run`。同步合并、两设备离线改动、传输层条件写入以及 Worker 的 SQLite 并发与版本保留测试均包含在根目录 `npm test` 中（Node.js 22 或更新版本）。
+
+目录：`sync-worker/` 为可独立部署的同步服务，`src/sync/` 为客户端同步，`src/` 为 React 界面，`src/storage/` 为本地数据层，`shared/` 为类型与备份校验，`extension/` 为扩展入口、弹窗和 Manifest，`scripts/` 为打包与浏览器检查。
