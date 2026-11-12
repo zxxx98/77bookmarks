@@ -110,6 +110,17 @@ export async function saveIcon(db: D1Database, siteId: number, contentType: stri
   ])
 }
 
+/**
+ * The browser loads the address itself, so the image is not kept here: showing a card costs this
+ * project nothing.
+ */
+export async function saveDirectIcon(db: D1Database, siteId: number, url: string): Promise<void> {
+  await db.batch([
+    db.prepare('DELETE FROM icons WHERE site_id = ?').bind(siteId),
+    db.prepare('UPDATE sites SET icon_url = ?, icon_version = 0 WHERE id = ?').bind(url, siteId),
+  ])
+}
+
 /** D1 returns BLOB columns as number arrays */
 export function blobBytes(value: unknown): Uint8Array {
   if (value instanceof ArrayBuffer) return new Uint8Array(value)

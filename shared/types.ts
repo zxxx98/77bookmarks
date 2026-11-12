@@ -16,9 +16,9 @@ export interface Site {
   id: number
   origin: string
   title: string
-  /** 0 when no icon is stored */
+  /** 0 when no icon is stored here */
   iconVersion: number
-  /** Custom icon address, shown instead of the stored icon */
+  /** Address the browser loads the icon from, instead of one stored here */
   iconUrl: string | null
   links: Link[]
 }

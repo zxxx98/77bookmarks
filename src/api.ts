@@ -67,8 +67,13 @@ export const api = {
   updateSite: (id: number, patch: { title?: string; groupId?: number; desktopId?: number }) => request(`/sites/${id}`, 'PATCH', patch),
   deleteSite: (id: number) => request(`/sites/${id}`, 'DELETE'),
   /** `url` shows an image from that address, `dataUrl` stores an upload, and an empty body re-fetches the icon from the site */
-  setIcon: (id: number, source: { dataUrl?: string; url?: string } = {}) => request(`/sites/${id}/icon`, 'POST', source),
+  setIcon: (id: number, source: { dataUrl?: string; url?: string } = {}) =>
+    request<{ ok: true; iconUrl: string | null }>(`/sites/${id}/icon`, 'POST', source),
   removeIcon: (id: number) => request(`/sites/${id}/icon`, 'DELETE'),
+
+  /** Moves stored icons to the addresses of the sites themselves, one batch of cards per call */
+  directIcons: (after: number) =>
+    request<{ checked: number; converted: number; nextAfter: number; done: boolean }>(`/direct-icons?after=${after}`, 'POST'),
 
   renameLink: (id: number, title: string) => request(`/links/${id}`, 'PATCH', { title }),
   deleteLink: (id: number) => request(`/links/${id}`, 'DELETE'),

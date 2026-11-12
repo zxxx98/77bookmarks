@@ -1,6 +1,6 @@
-import { fromBase64, MAX_ICON_BYTES, saveIcon } from '../../../../server/db'
+import { fromBase64, MAX_ICON_BYTES, saveDirectIcon, saveIcon } from '../../../../server/db'
 import { fail, idParam, json, readJson, type Fn } from '../../../../server/http'
-import { fetchPageMeta, fetchSiteIcon, type IconData } from '../../../../server/meta'
+import { fetchPageMeta, fetchSiteIcon, pickDirectIcon, type IconData } from '../../../../server/meta'
 import { parseIconUrl } from '../../../../shared/url'
 
 const DATA_URL = /^data:(image\/[\w.+-]+);base64,([A-Za-z0-9+/=]+)$/
@@ -22,8 +22,12 @@ export const onRequestPost: Fn = async ({ request, env, params }) => {
   if (typeof body.url === 'string') {
     const iconUrl = parseIconUrl(body.url)
     if (!iconUrl) return fail(400, '无效的图片地址')
-    await db.prepare('UPDATE sites SET icon_url = ? WHERE id = ?').bind(iconUrl, id).run()
-    return json({ ok: true })
+    // The address is the only icon now, so the stored one goes away
+    await db.batch([
+      db.prepare('DELETE FROM icons WHERE site_id = ?').bind(id),
+      db.prepare('UPDATE sites SET icon_url = ?, icon_version = 0 WHERE id = ?').bind(iconUrl, id),
+    ])
+    return json({ ok: true, iconUrl })
   }
 
   let icon: IconData | null
@@ -35,6 +39,13 @@ export const onRequestPost: Fn = async ({ request, env, params }) => {
     icon = { contentType: match[1], data: bytes.buffer as ArrayBuffer }
   } else {
     const meta = await fetchPageMeta(site.origin)
+    // The browser can load the icon from the site itself, which keeps this project out of it
+    const direct = await pickDirectIcon(site.origin, meta.icons)
+    if (direct) {
+      await saveDirectIcon(db, id, direct.url)
+      return json({ ok: true, iconUrl: direct.url })
+    }
+    // Otherwise the image is stored here and handed out by /api/icon
     icon = await fetchSiteIcon(site.origin, meta.icons)
     if (!icon) {
       await db.prepare('UPDATE sites SET icon_version = -1 WHERE id = ?').bind(id).run()
@@ -43,7 +54,7 @@ export const onRequestPost: Fn = async ({ request, env, params }) => {
   }
 
   await saveIcon(db, id, icon.contentType, icon.data)
-  return json({ ok: true })
+  return json({ ok: true, iconUrl: null })
 }
 
 /** Removes both the stored icon and the custom address, leaving the letter avatar */

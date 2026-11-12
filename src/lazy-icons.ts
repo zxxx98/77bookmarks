@@ -40,7 +40,7 @@ export function useLazyIcons(desktop: Desktop | undefined, enabled = true) {
       inFlight.add(siteId)
 
       try {
-        await api.setIcon(siteId)
+        const result = await api.setIcon(siteId)
         if (cancelled) return
         const stamp = Date.now()
         updateBoardCache(queryClient, (page) => {
@@ -49,7 +49,8 @@ export function useLazyIcons(desktop: Desktop | undefined, enabled = true) {
             const sites = group.sites.map((s) => {
               if (s.id === siteId) {
                 modified = true
-                return { ...s, iconVersion: stamp }
+                // An address of the site itself means no image is stored here
+                return { ...s, iconVersion: result.iconUrl ? 0 : stamp, iconUrl: result.iconUrl }
               }
               return s
             })

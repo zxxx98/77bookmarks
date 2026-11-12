@@ -38,6 +38,8 @@ function clean(value: string | null | undefined, max = 80): string | null {
 
 const TITLE_SEPARATOR = /\s+[-–—·•_]\s+|\s*[|｜]\s*/
 const GENERIC_TITLE = /^(home|homepage|index|welcome|首页|主页|官网)$/i
+/** Thrown to stop reading a page once its head is over */
+const STOP_AT_BODY = Symbol('stop at body')
 
 function titleParts(title: string): string[] {
   return title
@@ -97,6 +99,7 @@ export async function fetchPageMeta(pageUrl: string): Promise<PageMeta> {
     meta.finalUrl = response.url
 
     let title = ''
+    let stopped = false
     const icons: { href: string; rank: number }[] = []
     const rewriter = new HTMLRewriter()
       .on('head title', {
@@ -127,7 +130,19 @@ export async function fetchPageMeta(pageUrl: string): Promise<PageMeta> {
           }
         },
       })
-    await rewriter.transform(response).arrayBuffer()
+      .on('body', {
+        element() {
+          // The title and the icon links are all in the head, so the rest of the page is not read
+          stopped = true
+          throw STOP_AT_BODY
+        },
+      })
+    try {
+      await rewriter.transform(response).arrayBuffer()
+    } catch (error) {
+      // The rewrite ends by throwing, which the runtime may report in its own words
+      if (!stopped) throw error
+    }
 
     meta.title = clean(title)
     meta.icons = icons.sort((a, b) => b.rank - a.rank).map((icon) => icon.href)
@@ -135,6 +150,73 @@ export async function fetchPageMeta(pageUrl: string): Promise<PageMeta> {
     // unreachable or slow sites just get no metadata
   }
   return meta
+}
+
+const IMAGE_EXTENSION = /\.(ico|png|svg|jpe?g|gif|webp|avif|bmp)(\?|#|$)/i
+/** An icon the browser loads itself may be bigger than one stored here, which the browser caches */
+const MAX_DIRECT_ICON_BYTES = 256 * 1024
+/** How many addresses of one page are tried before giving up */
+const MAX_DIRECT_CANDIDATES = 3
+
+export interface DirectIcon {
+  /** The address the browser loads the image from */
+  url: string
+  contentType: string | null
+  size: number | null
+}
+
+/**
+ * Only https: an http image would be blocked as mixed content on an https page. A site that
+ * cannot be reached over https keeps its icon stored here.
+ */
+export function canLoadDirectly(url: string): boolean {
+  try {
+    return new URL(url).protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+function looksLikeImage(contentType: string | null, url: string): boolean {
+  if (contentType?.startsWith('image/')) return true
+  // Some servers serve .ico files as octet-stream, so the address has the last word
+  return IMAGE_EXTENSION.test(url)
+}
+
+/**
+ * Checks the address without downloading the image. Null when the site doesn't serve an image
+ * there. A site that refuses HEAD is accepted: the browser asks with GET anyway.
+ */
+export async function probeIcon(url: string): Promise<DirectIcon | null> {
+  let response: Response
+  try {
+    response = await fetch(url, {
+      method: 'HEAD',
+      headers: { 'User-Agent': USER_AGENT, Accept: 'image/*,*/*;q=0.5' },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
+  } catch {
+    return null
+  }
+  if (response.status === 405 || response.status === 501) return { url, contentType: null, size: null }
+  if (!response.ok) return null
+  const contentType = (response.headers.get('Content-Type') ?? '').split(';')[0].trim().toLowerCase() || null
+  const length = Number(response.headers.get('Content-Length'))
+  const size = Number.isFinite(length) && length > 0 ? length : null
+  if (size !== null && size > MAX_DIRECT_ICON_BYTES) return null
+  if (!looksLikeImage(contentType, url)) return null
+  return { url, contentType, size }
+}
+
+/** The first address the browser can load the icon from, out of the ones the page offers */
+export async function pickDirectIcon(origin: string, candidates: string[]): Promise<DirectIcon | null> {
+  const urls = [...new Set([...candidates.slice(0, MAX_DIRECT_CANDIDATES), `${origin}/favicon.ico`])]
+  for (const url of urls) {
+    if (!canLoadDirectly(url)) continue
+    const icon = await probeIcon(url)
+    if (icon) return icon
+  }
+  return null
 }
 
 export async function fetchIcon(iconUrl: string): Promise<IconData | null> {
