@@ -1,4 +1,7 @@
 // @vitest-environment node
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp } from './app'
 import { iconLinks, rememberMisses } from './icons'
@@ -248,40 +251,71 @@ describe('self-hosted updates', () => {
     customApp.close()
   })
 
-  it('triggers the configured update webhook with bearer auth', async () => {
-    const fetchFn = vi.fn(async () => new Response(null, { status: 200 }))
-    const customApp = await createApp({
-      store,
-      password: PASSWORD,
-      fetchIcon,
-      update: {
-        currentVersion: '2.1.1',
-        webhookUrl: 'http://watchtower:8080/v1/update',
-        webhookToken: 'secret-token',
-        fetchFn: fetchFn as unknown as typeof fetch,
-      },
-    })
-    const loginRes = await customApp.handle(new Request('http://bookmarks.test/api/login', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ password: PASSWORD }),
-    }))
-    const cookie = loginRes.headers.get('set-cookie')!.split(';')[0]
+  it('downloads and applies the selfhost release archive and schedules restart', async () => {
+    const appDir = await mkdtemp(join(tmpdir(), '77bookmarks-app-'))
+    try {
+      await mkdir(join(appDir, 'public'), { recursive: true })
+      await writeFile(join(appDir, 'server.mjs'), 'old-server')
+      await writeFile(join(appDir, 'public', 'index.html'), 'old-html')
 
-    const applyRes = await customApp.handle(new Request('http://bookmarks.test/api/update/apply', {
-      method: 'POST',
-      headers: { cookie },
-    }))
-    expect(applyRes.status).toBe(200)
-    expect(await applyRes.json()).toMatchObject({ triggered: true })
-    expect(fetchFn).toHaveBeenCalledWith(
-      'http://watchtower:8080/v1/update',
-      expect.objectContaining({
+      const fetchFn = vi.fn(async (url: string) => {
+        if (url.includes('api.github.com')) {
+          return Response.json({
+            tag_name: 'v2.2.0',
+            html_url: 'https://github.com/zxxx98/77bookmarks/releases/tag/v2.2.0',
+            assets: [
+              { name: '77bookmarks-selfhost-v2.2.0.tar.gz', browser_download_url: 'https://downloads.example/selfhost.tar.gz' },
+            ],
+          })
+        }
+        return new Response(new Uint8Array([1, 2, 3]), { status: 200 })
+      })
+      const extractFn = vi.fn(async (_archive: string, destDir: string) => {
+        await mkdir(join(destDir, 'public'), { recursive: true })
+        await writeFile(join(destDir, 'server.mjs'), 'new-server')
+        await writeFile(join(destDir, 'public', 'index.html'), 'new-html')
+      })
+      const onRestart = vi.fn()
+
+      const customApp = await createApp({
+        store,
+        password: PASSWORD,
+        fetchIcon,
+        update: {
+          currentVersion: '2.1.1',
+          appDir,
+          onRestart,
+          fetchFn: fetchFn as unknown as typeof fetch,
+          extractFn,
+        },
+      })
+      const loginRes = await customApp.handle(new Request('http://bookmarks.test/api/login', {
         method: 'POST',
-        headers: { authorization: 'Bearer secret-token' },
-      }),
-    )
-    await customApp.service.syncStatus()
-    customApp.close()
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ password: PASSWORD }),
+      }))
+      const cookie = loginRes.headers.get('set-cookie')!.split(';')[0]
+
+      const checked = await (await customApp.handle(new Request('http://bookmarks.test/api/update/check', {
+        method: 'POST',
+        headers: { cookie },
+      }))).json()
+      expect(checked).toMatchObject({ hasUpdate: true, canTriggerUpdate: true })
+
+      const applyRes = await customApp.handle(new Request('http://bookmarks.test/api/update/apply', {
+        method: 'POST',
+        headers: { cookie },
+      }))
+      expect(applyRes.status).toBe(200)
+      expect(await applyRes.json()).toMatchObject({ triggered: true })
+      expect(await readFile(join(appDir, 'server.mjs'), 'utf8')).toBe('new-server')
+      expect(await readFile(join(appDir, 'public', 'index.html'), 'utf8')).toBe('new-html')
+      await vi.waitFor(() => expect(onRestart).toHaveBeenCalledTimes(1))
+
+      await customApp.service.syncStatus()
+      customApp.close()
+    } finally {
+      await rm(appDir, { recursive: true, force: true })
+    }
   })
 })

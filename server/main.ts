@@ -1,7 +1,7 @@
 import { createReadStream } from 'node:fs'
 import { mkdir, stat } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
-import { dirname, extname, join, normalize, resolve, sep } from 'node:path'
+import { basename, dirname, extname, join, normalize, resolve, sep } from 'node:path'
 import { Readable } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { createApp } from './app'
@@ -16,7 +16,9 @@ const TYPES: Record<string, string> = {
 }
 const SECURITY = { 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'x-frame-options': 'DENY' }
 
-const here = dirname(fileURLToPath(import.meta.url))
+const entryFile = fileURLToPath(import.meta.url)
+const here = dirname(entryFile)
+const selfhostDir = basename(entryFile) === 'server.mjs' ? here : null
 const port = Number(process.env.PORT) || 8080
 const dataDir = resolve(process.env.DATA_DIR ?? './data')
 const staticDir = resolve(process.env.STATIC_DIR ?? join(here, 'public'))
@@ -36,9 +38,8 @@ const app = await createApp({
   password,
   update: {
     repo: process.env.UPDATE_REPO,
-    webhookUrl: process.env.UPDATE_WEBHOOK_URL,
-    webhookToken: process.env.UPDATE_WEBHOOK_TOKEN,
-    webhookMethod: process.env.UPDATE_WEBHOOK_METHOD,
+    appDir: selfhostDir,
+    onRestart: () => shutdown(),
   },
 })
 
@@ -111,11 +112,13 @@ const server = createServer((request, response) => {
 })
 server.listen(port, '0.0.0.0', () => console.log(`77 Bookmarks 已启动：http://0.0.0.0:${port}（数据目录 ${dataDir}）`))
 
+function shutdown() {
+  app.close()
+  server.close(() => { store.destroy(); process.exit(0) })
+  // Open event streams would otherwise hold the server open
+  server.closeAllConnections()
+}
+
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-  process.on(signal, () => {
-    app.close()
-    server.close(() => { store.destroy(); process.exit(0) })
-    // Open event streams would otherwise hold the server open
-    server.closeAllConnections()
-  })
+  process.on(signal, shutdown)
 }

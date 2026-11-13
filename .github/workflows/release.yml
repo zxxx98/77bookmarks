@@ -67,12 +67,14 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run build:clipper
+      - run: npm run build:selfhost
 
-      - name: Archive extension packages
+      - name: Archive release packages
         run: |
           ver="${{ needs.check-version.outputs.version }}"
           (cd dist-extension && zip -r "../77bookmarks-extension-v${ver}.zip" .)
           (cd dist-clipper && zip -r "../77bookmarks-clipper-v${ver}.zip" .)
+          (cd dist-selfhost && tar -czf "../77bookmarks-selfhost-v${ver}.tar.gz" .)
 
       - name: Publish GitHub Release
         env:
@@ -82,10 +84,11 @@ jobs:
           ver="${{ needs.check-version.outputs.version }}"
           ext_zip="77bookmarks-extension-v${ver}.zip"
           clip_zip="77bookmarks-clipper-v${ver}.zip"
+          selfhost_tar="77bookmarks-selfhost-v${ver}.tar.gz"
           if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" "$ext_zip" "$clip_zip" --clobber
+            gh release upload "$tag" "$ext_zip" "$clip_zip" "$selfhost_tar" --clobber
           else
-            gh release create "$tag" "$ext_zip" "$clip_zip" --title "$tag" --generate-notes
+            gh release create "$tag" "$ext_zip" "$clip_zip" "$selfhost_tar" --title "$tag" --generate-notes
           fi
 
   publish-docker:

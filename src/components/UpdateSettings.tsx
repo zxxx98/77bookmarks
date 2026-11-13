@@ -8,7 +8,7 @@ import { formatAgo, formatDate } from '../usage'
 const COMPOSE_COMMAND = 'docker compose pull && docker compose up -d'
 const DOCKER_IMAGE_COMMAND = 'docker pull ghcr.io/zxxx98/77bookmarks:latest'
 
-/** Self-hosted version check, release notes, Docker update commands, and optional webhook trigger */
+/** Self-hosted version check, release notes, in-place update, and Docker update commands */
 export function UpdateSettings({ update, onBusyChange }: { update: NonNullable<Platform['update']>; onBusyChange: (busy: boolean) => void }) {
   const { toast, confirm } = useUi()
   const [status, setStatus] = useState<UpdateStatus | null>(null)
@@ -98,7 +98,7 @@ export function UpdateSettings({ update, onBusyChange }: { update: NonNullable<P
   const triggerUpdate = async () => {
     const ok = await confirm({
       title: '确认立即更新？',
-      message: '将通知更新服务拉取最新镜像并重启容器，期间页面会短暂断开。',
+      message: '将从 GitHub Release 下载最新自部署包并自动重启服务，期间页面会短暂断开。',
       confirmText: '立即更新',
     })
     if (!ok) return
@@ -215,9 +215,9 @@ export function UpdateSettings({ update, onBusyChange }: { update: NonNullable<P
           <CommandRow label="Compose 更新命令" command={COMPOSE_COMMAND} onCopy={() => void copyCommand(COMPOSE_COMMAND, '更新命令')} />
           <CommandRow label="镜像拉取命令" command={DOCKER_IMAGE_COMMAND} onCopy={() => void copyCommand(DOCKER_IMAGE_COMMAND, '拉取命令')} />
         </div>
-        {!status?.canTriggerUpdate && (
+        {status?.hasUpdate && !status.canTriggerUpdate && (
           <p className="mt-2.5 text-xs leading-relaxed text-faint">
-            提示：如需在网页内点击「立即更新」，可配合 Watchtower 等容器更新工具，并在环境变量中设置 <code className="rounded-control border border-line px-1 font-mono">UPDATE_WEBHOOK_URL</code>。
+            提示：当前版本未检测到可用的在线更新包（或非打包环境运行），请使用上方 Docker 命令升级。
           </p>
         )}
       </div>
