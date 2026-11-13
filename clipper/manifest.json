@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "77 Bookmarks 右键添加",
   "description": "右键把当前网页或链接添加到自部署的 77 Bookmarks。",
-  "version": "2.2.2",
+  "version": "2.2.3",
   "minimum_chrome_version": "120",
   "permissions": [
     "contextMenus",

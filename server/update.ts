@@ -211,16 +211,42 @@ export class UpdateService {
       const publicDir = join(this.appDir, 'public')
       const nextPublic = join(this.appDir, 'public.new')
       const oldPublic = join(this.appDir, 'public.old')
+      const nextServer = join(this.appDir, 'server.mjs.new')
       await rm(nextPublic, { recursive: true, force: true })
       await rm(oldPublic, { recursive: true, force: true })
       await cp(stagedPublic, nextPublic, { recursive: true })
-      if (await exists(publicDir)) await rename(publicDir, oldPublic)
-      await rename(nextPublic, publicDir)
-      await rm(oldPublic, { recursive: true, force: true })
-
-      const nextServer = join(this.appDir, 'server.mjs.new')
       await cp(stagedServer, nextServer)
-      await rename(nextServer, join(this.appDir, 'server.mjs'))
+      let publicBackedUp = false
+      let publicInstalled = false
+      try {
+        if (await exists(publicDir)) {
+          try {
+            await rename(publicDir, oldPublic)
+          } catch (error) {
+            // OverlayFS can reject renaming a directory from a Docker image layer,
+            // even when both paths are on the same mount. Copy it up before removal.
+            if ((error as NodeJS.ErrnoException).code !== 'EXDEV') throw error
+            await cp(publicDir, oldPublic, { recursive: true })
+          }
+          publicBackedUp = true
+          await rm(publicDir, { recursive: true, force: true })
+        }
+        await rename(nextPublic, publicDir)
+        publicInstalled = true
+        await rename(nextServer, join(this.appDir, 'server.mjs'))
+      } catch (error) {
+        if (publicBackedUp) {
+          await rm(publicDir, { recursive: true, force: true })
+          await rename(oldPublic, publicDir)
+        } else if (publicInstalled) {
+          await rm(publicDir, { recursive: true, force: true })
+        }
+        throw error
+      } finally {
+        await rm(nextPublic, { recursive: true, force: true }).catch(() => undefined)
+        await rm(nextServer, { force: true }).catch(() => undefined)
+      }
+      await rm(oldPublic, { recursive: true, force: true }).catch(() => undefined)
 
       if (this.onRestart) {
         const timer = setTimeout(this.onRestart, 300)
