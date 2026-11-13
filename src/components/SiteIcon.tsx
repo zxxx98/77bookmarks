@@ -3,6 +3,7 @@ import { api } from '../api'
 import { useState, type CSSProperties } from 'react'
 import type { Site } from '../../shared/types'
 import { hostOf } from '../../shared/url'
+import { usePrivateActive } from '../private/use'
 import { useIsDark, useStyle, type StyleId } from '../theme'
 
 function hueOf(text: string): number {
@@ -46,9 +47,11 @@ export function SiteIcon({ site, size = 40 }: { site: Pick<Site, 'id' | 'origin'
   const [failed, setFailed] = useState<string[]>([])
   const [styleId] = useStyle()
   const dark = useIsDark()
-  const cached = useQuery({ queryKey: ['icon', site.id, site.iconVersion], queryFn: () => api.icon(site.id), enabled: site.iconVersion > 0, staleTime: Infinity })
+  // A card of a private space shows its letter: loading a picture would ask the site for it from this window
+  const isPrivate = usePrivateActive()
+  const cached = useQuery({ queryKey: ['icon', site.id, site.iconVersion], queryFn: () => api.icon(site.id), enabled: site.iconVersion > 0 && !isPrivate, staleTime: Infinity })
   const stored = cached.data
-  const src = [site.iconUrl, stored].find((source) => source && !failed.includes(source))
+  const src = isPrivate ? undefined : [site.iconUrl, stored].find((source) => source && !failed.includes(source))
   const borderRadius = styleId === 'swiss' ? 0 : Math.round(size * 0.22)
   const boxStyle: CSSProperties = { width: size, height: size, borderRadius }
 

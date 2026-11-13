@@ -1,11 +1,14 @@
-import { BookmarkPlus, ChartNoAxesColumn, Check, ChevronDown, CornerDownLeft, Ellipsis, FoldVertical, FolderPlus, ListTodo, LogOut, Monitor, Moon, Palette, Pencil, Plus, Settings, Sun, UnfoldVertical, X } from 'lucide-react'
+import { BookmarkPlus, ChartNoAxesColumn, Check, ChevronDown, CornerDownLeft, Ellipsis, FoldVertical, FolderPlus, ListTodo, Lock, LogOut, Monitor, Moon, Palette, Pencil, Plus, Settings, Sun, UnfoldVertical, X } from 'lucide-react'
 import type { RefObject } from 'react'
 import type { Desktop, DesktopSummary, View } from '../../shared/types'
 import { SEARCH_ENGINES, SearchEngineIcon, useSearchEngine, type SearchEngineId } from '../engines'
 import { STYLE_PRESETS, useStyle, useTheme, type StyleId, type StylePreset, type Theme } from '../theme'
 import { useLogout } from '../session'
 import { usePopover } from '../ui'
+import { privateSpace } from '../private/session'
+import { usePrivateActive, usePrivateEntryShown } from '../private/use'
 import { DesktopSwitcher } from './DesktopSwitcher'
+import { PrivateSpaceButton, type PrivateAction } from './PrivateSpace'
 import { ViewSwitch } from './ViewSwitch'
 
 const THEMES: { value: Theme; label: string; icon: typeof Sun }[] = [
@@ -56,6 +59,7 @@ interface Props {
   onCreateGroup: () => void
   onSettings: () => void
   onUsage: () => void
+  onPrivate: (action: PrivateAction) => void
   todoOpen: boolean
   /** Open to-dos, once the list has loaded */
   todoCount?: number
@@ -82,6 +86,7 @@ export function TopBar({
   onCreateGroup,
   onSettings,
   onUsage,
+  onPrivate,
   todoOpen,
   todoCount,
   onToggleTodos,
@@ -90,9 +95,11 @@ export function TopBar({
   const [styleId, setStyleId, activePreset] = useStyle()
   const [engine] = useSearchEngine()
   const hasQuery = query.length > 0
+  const privateActive = usePrivateActive()
+  const entryShown = usePrivateEntryShown()
 
   return (
-    <header className="sticky top-0 z-30 border-b-[length:var(--border-w)] border-line bg-bg/85 backdrop-blur-md">
+    <header className={`sticky top-0 z-30 border-b-[length:var(--border-w)] bg-bg/85 backdrop-blur-md ${privateActive ? 'border-accent' : 'border-line'}`}>
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-2 px-4 sm:gap-3 sm:px-6">
         <div className="flex items-center gap-2.5 max-sm:hidden">
           <Logo />
@@ -184,6 +191,8 @@ export function TopBar({
             </span>
           )}
         </button>
+        {/* An open space always shows its way out; the way in can be hidden in the settings */}
+        {(privateActive || entryShown) && <PrivateSpaceButton onAction={onPrivate} className={privateActive ? '' : 'max-md:hidden'} />}
         <ThemeMenu theme={theme} onTheme={setTheme} styleId={styleId} activePreset={activePreset} onStyle={setStyleId} className="max-md:hidden" />
         <button
           className={`icon-btn ${editing ? '!bg-accent-soft !text-accent' : ''}`}
@@ -205,6 +214,7 @@ export function TopBar({
           onToggleCollapseAll={onToggleCollapseAll}
           onSettings={onSettings}
           onUsage={onUsage}
+          onPrivate={privateActive || !entryShown ? undefined : () => onPrivate('unlock')}
         />
         <AddMenu onAdd={onAdd} onCreateGroup={onCreateGroup} />
       </div>
@@ -409,9 +419,11 @@ interface MenuProps {
   onToggleCollapseAll?: () => void
   onSettings: () => void
   onUsage: () => void
+  /** Opens the way into the private spaces, where the top bar has no room for its button */
+  onPrivate?: () => void
 }
 
-function MoreMenu({ view, onView, theme, onTheme, styleId, onStyle, allCollapsed, onToggleCollapseAll, onSettings, onUsage }: MenuProps) {
+function MoreMenu({ view, onView, theme, onTheme, styleId, onStyle, allCollapsed, onToggleCollapseAll, onSettings, onUsage, onPrivate }: MenuProps) {
   const menu = usePopover<HTMLDivElement>()
 
   const item = 'flex w-full items-center gap-2.5 rounded-control px-2.5 py-2 text-left text-sm hover:bg-fg/6'
@@ -470,6 +482,12 @@ function MoreMenu({ view, onView, theme, onTheme, styleId, onStyle, allCollapsed
             </div>
             <div className="my-1 h-px bg-line" />
           </div>
+          {onPrivate && (
+            <button className={`${item} md:hidden`} onClick={() => { close(); onPrivate() }}>
+              <Lock size={15} className="text-muted" />
+              隐私空间
+            </button>
+          )}
           <button
             className={item}
             onClick={() => {
@@ -495,6 +513,8 @@ function MoreMenu({ view, onView, theme, onTheme, styleId, onStyle, allCollapsed
               className={item}
               onClick={() => {
                 close()
+                // Signing out leaves nothing open behind it
+                privateSpace.lock()
                 logout()
               }}
             >

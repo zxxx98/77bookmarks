@@ -1,5 +1,6 @@
 import { DatabaseSync } from 'node:sqlite'
 import { seedDatabase, type LocalDatabase } from '../src/storage/db'
+import { SCHEMA, type StoreSchema } from '../src/storage/schema'
 
 /**
  * The data service is written against IndexedDB. This file gives it the same handful of
@@ -10,24 +11,6 @@ import { seedDatabase, type LocalDatabase } from '../src/storage/db'
  * for a known moment, committed once nothing more is asked of them, rolled back as a whole
  * when a request fails or the caller aborts.
  */
-interface StoreSchema {
-  /** Property holding the key; `auto` stores get theirs from the database */
-  key: string
-  auto: boolean
-  indexes: Record<string, { paths: string[]; unique?: boolean }>
-}
-
-const SCHEMA: Record<string, StoreSchema> = {
-  desktops: { key: 'id', auto: true, indexes: {} },
-  groups: { key: 'id', auto: true, indexes: { desktopId: { paths: ['desktopId'] } } },
-  sites: { key: 'id', auto: true, indexes: { desktopId: { paths: ['desktopId'] }, groupId: { paths: ['groupId'] }, origin: { paths: ['desktopId', 'origin'], unique: true } } },
-  links: { key: 'id', auto: true, indexes: { siteId: { paths: ['siteId'] }, path: { paths: ['siteId', 'path'], unique: true } } },
-  icons: { key: 'siteId', auto: false, indexes: {} },
-  todos: { key: 'id', auto: true, indexes: {} },
-  settings: { key: 'key', auto: false, indexes: {} },
-  sync: { key: 'key', auto: false, indexes: {} },
-}
-
 type Key = string | number
 type Row = { id: Key; data: string }
 type Document = Record<string, unknown>

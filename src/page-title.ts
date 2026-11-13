@@ -1,5 +1,6 @@
 import { fullUrl, parseBookmarkUrl } from '../shared/url'
 import { platform } from './platform'
+import { privateSpace } from './private/session'
 
 export { TITLE_MESSAGE } from './storage/messages'
 export { fetchTitleHtml, TITLE_TIMEOUT_MS } from './title-fetch'
@@ -19,6 +20,8 @@ export type PageTitleResult = { status: 'success'; title: string } | { status: '
 export async function requestPageTitle(input: string, { requestPermission = false } = {}): Promise<PageTitleResult> {
   const parsed = parseBookmarkUrl(input)
   if (!parsed?.path) return { status: 'fallback' }
+  // Reading the page would send its address through the server or the extension's worker
+  if (privateSpace.active()) return { status: 'fallback' }
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return { status: 'fallback' }
   try {
     const found = await platform.pageHtml(fullUrl(parsed.origin, parsed.path), parsed.origin, requestPermission)

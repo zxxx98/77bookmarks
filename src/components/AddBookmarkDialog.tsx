@@ -5,6 +5,7 @@ import { fallbackLinkTitle, fullUrl, parseBookmarkUrl, parseIconUrl, parseIntran
 import { api } from '../api'
 import { requestPageTitle, type PageTitleResult } from '../page-title'
 import { Dialog, useAct, useUi } from '../ui'
+import { privateSpace } from '../private/session'
 import { SiteIcon } from './SiteIcon'
 
 const RESULT_MESSAGE: Record<AddResult['result'], (title: string) => string> = {
@@ -260,7 +261,7 @@ export function AddBookmarkDialog({ open, initialUrl = '', onClose, desktop }: {
           </div>
         )}
 
-        {!existing &&
+        {!existing && !privateSpace.active() &&
           (iconUrl === null ? (
             <button type="button" disabled={busy} className="mt-3 text-xs text-muted underline-offset-2 hover:text-accent hover:underline" onClick={() => setIconUrl('')}>
               使用自定义图标地址

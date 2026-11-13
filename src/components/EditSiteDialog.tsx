@@ -4,6 +4,7 @@ import { MAX_SITE_DESCRIPTION_LENGTH, type Desktop, type DesktopSummary, type Si
 import { hostOf, parseIconUrl, parseIntranetUrl } from '../../shared/url'
 import { api } from '../api'
 import { Dialog, useAct, useUi } from '../ui'
+import { privateSpace } from '../private/session'
 import { SiteIcon } from './SiteIcon'
 
 const MAX_ICON_BYTES = 100 * 1024
@@ -54,6 +55,7 @@ function Editor({ site, desktop, desktops }: { site: Site; desktop: Desktop; des
   const act = useAct()
   const { toast } = useUi()
   const fileInput = useRef<HTMLInputElement>(null)
+  const letterOnly = privateSpace.active()
   const [iconBusy, setIconBusy] = useState(false)
   const [iconUrl, setIconUrl] = useState(site.iconUrl ?? '')
   const groupId = groups.find((g) => g.sites.some((s) => s.id === site.id))?.id
@@ -124,7 +126,8 @@ function Editor({ site, desktop, desktops }: { site: Site; desktop: Desktop; des
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate font-mono text-xs text-muted">{hostOf(site.origin)}</p>
-          <div className="mt-1 flex flex-wrap gap-1">
+          {letterOnly && <p className="mt-1 text-xs leading-relaxed text-faint">隐私空间里的卡片只显示字母图标，不向网站请求图片。</p>}
+          <div className={`mt-1 flex flex-wrap gap-1 ${letterOnly ? 'hidden' : ''}`}>
             <button className="btn btn-soft h-7 px-2 text-xs" disabled={iconBusy} onClick={() => changeIcon(() => api.setIcon(site.id), '图标已更新')}>
               <RefreshCw size={12} />
               重新获取
@@ -147,7 +150,7 @@ function Editor({ site, desktop, desktops }: { site: Site; desktop: Desktop; des
         </div>
       </div>
 
-      <form className="-mt-2" onSubmit={useIconUrl}>
+      <form className="-mt-2" hidden={letterOnly} onSubmit={useIconUrl}>
         <label className="label" htmlFor="site-icon-url">
           图标地址
         </label>

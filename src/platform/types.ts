@@ -29,6 +29,13 @@ export interface Platform {
     contains(origin: string): Promise<boolean>
     request(origin: string): Promise<boolean>
   }
+  /**
+   * Opening an address in an incognito window, which a page cannot do by itself. Absent or
+   * answering false where nothing can do it; the caller then tells the user.
+   */
+  incognito?: {
+    open(url: string): Promise<boolean>
+  }
   /** Signing in; absent where the data belongs to the browser profile itself */
   session?: {
     status(): Promise<{ authenticated: boolean; siteName: string }>

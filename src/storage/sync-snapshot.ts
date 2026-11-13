@@ -1,7 +1,8 @@
 import { clickCountsOf } from '../../shared/counters'
 import { DEFAULT_SETTINGS, type SystemSettings } from '../../shared/settings'
 import { SNAPSHOT_FORMAT, SNAPSHOT_VERSION, SEEDED_AT, type SyncSnapshot } from '../../shared/sync'
-import { sorted, STORES, type DesktopRow, type GroupRow, type LinkRow, type LocalDatabase, type SettingsRow, type SiteRow, type SyncTransaction, type TodoRow } from './db'
+import type { Vault } from '../../shared/vault'
+import { sorted, STORES, VAULT_STORE, type DesktopRow, type GroupRow, type LinkRow, type LocalDatabase, type SettingsRow, type SiteRow, type SyncTransaction, type TodoRow } from './db'
 
 interface LocalRows {
   desktops: DesktopRow[]
@@ -10,17 +11,19 @@ interface LocalRows {
   links: LinkRow[]
   todos: TodoRow[]
   settings: SettingsRow[]
+  vault?: Vault
 }
 
 /** Reads every record of the local database; the cloud copy never contains icons or sync settings */
 export async function buildSnapshot(db: LocalDatabase, deviceId: string): Promise<SyncSnapshot> {
-  const tx = db.transaction([...STORES], 'readonly')
-  const [desktops, groups, sites, links, todos, settings] = await Promise.all([
+  const tx = db.transaction([...STORES, VAULT_STORE] as [...typeof STORES, typeof VAULT_STORE], 'readonly')
+  const [desktops, groups, sites, links, todos, settings, vault] = await Promise.all([
     tx.objectStore('desktops').getAll(), tx.objectStore('groups').getAll(), tx.objectStore('sites').getAll(),
     tx.objectStore('links').getAll(), tx.objectStore('todos').getAll(), tx.objectStore('settings').getAll(),
+    tx.objectStore('vault').get('vault'),
   ])
   await tx.done
-  return snapshotOf({ desktops, groups, sites, links, todos, settings }, deviceId)
+  return snapshotOf({ desktops, groups, sites, links, todos, settings, vault: vault?.vault }, deviceId)
 }
 
 export function snapshotOf(rows: LocalRows, deviceId: string): SyncSnapshot {
@@ -58,6 +61,7 @@ export function snapshotOf(rows: LocalRows, deviceId: string): SyncSnapshot {
         clicks: row.clicks, clickCounts: clickCountsOf(row), lastClickedAt: row.lastClickedAt,
       })),
     todos: sorted(rows.todos).map((row) => ({ ...meta(row), text: row.text, doneAt: row.doneAt })),
+    ...(rows.vault ? { vault: rows.vault } : {}),
   }
 }
 
@@ -125,4 +129,5 @@ export async function applySnapshot(tx: SyncTransaction, snapshot: SyncSnapshot)
 
   await tx.objectStore('settings').put({ key: 'system', value: snapshot.settings.value, updatedAt: snapshot.settings.updatedAt })
   await tx.objectStore('settings').put({ key: 'since', value: snapshot.since })
+  if (snapshot.vault) await tx.objectStore('vault').put({ key: 'vault', vault: snapshot.vault })
 }

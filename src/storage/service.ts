@@ -4,8 +4,9 @@ import { DEFAULT_SETTINGS, isLayoutColumns, MAX_SITE_NAME_LENGTH, type SystemSet
 import { DEFAULT_DESKTOP_SYNC_ID, DEFAULT_GROUP_SYNC_ID, mergeSnapshots, snapshotFingerprint, type MergeStats, type SyncSnapshot } from '../../shared/sync'
 import { MAX_SITE_DESCRIPTION_LENGTH, MAX_TODO_LENGTH, isView, type AddResult, type BoardPage, type ClickTarget, type Desktop, type ImportMode, type ImportResult, type OrderInput, type UsageStats, type View } from '../../shared/types'
 import { fallbackLinkTitle, hostOf, parseBookmarkUrl, parseIconUrl, parseIntranetUrl } from '../../shared/url'
+import { MAX_CHUNKS, parseChunks, restoreVault, type Vault } from '../../shared/vault'
 import { EMPTY_SYNC_CONFIG, EMPTY_SYNC_STATE, isSyncKind, type SyncConfig, type SyncState, type SyncStatus } from '../sync/types'
-import { changed, entity, openLocalDatabase, sorted, STORES, SYNC_STORE, type DesktopRow, type Entity, type GroupRow, type LinkRow, type LocalDatabase, type SettingsRow, type SiteRow, type SyncTransaction, type TodoRow, type WriteTransaction } from './db'
+import { changed, entity, openLocalDatabase, sorted, STORES, SYNC_STORE, VAULT_STORE, type DesktopRow, type Entity, type GroupRow, type LinkRow, type LocalDatabase, type SettingsRow, type SiteRow, type SyncTransaction, type TodoRow, type WriteTransaction } from './db'
 import { applySnapshot, buildSnapshot, snapshotOf } from './sync-snapshot'
 import { deriveSyncId } from './uuid'
 
@@ -72,7 +73,7 @@ export class LocalService {
   /** Same as write(), plus the store holding the sync ancestor and the cloud settings */
   private async writeSync<T>(run: (tx: SyncTransaction) => Promise<T>): Promise<T> {
     const db = await this.db()
-    const tx = db.transaction([...STORES, SYNC_STORE] as [...typeof STORES, typeof SYNC_STORE], 'readwrite')
+    const tx = db.transaction([...STORES, SYNC_STORE, VAULT_STORE] as [...typeof STORES, typeof SYNC_STORE, typeof VAULT_STORE], 'readwrite')
     const settled = tx.done.catch(() => undefined)
     try {
       const result = await run(tx)
@@ -488,8 +489,9 @@ export class LocalService {
   }
   async exportBackup(desktopId?: number) {
     const db = await this.db()
-    const tx = db.transaction([...STORES], 'readonly')
+    const tx = db.transaction([...STORES, VAULT_STORE] as [...typeof STORES, typeof VAULT_STORE], 'readonly')
     const [desktops, groups, sites, links, icons, todos, settings] = await Promise.all(STORES.map((store) => tx.objectStore(store).getAll())) as [DesktopRow[], GroupRow[], SiteRow[], LinkRow[], { siteId: number; dataUrl: string }[], TodoRow[], { key: string; value: SystemSettings | number }[]]
+    const vault = (await tx.objectStore('vault').get('vault'))?.vault
     await tx.done
     if (desktopId !== undefined && !desktops.some((d) => d.id === desktopId)) throw new Error('桌面不存在')
     const iconMap = new Map(icons.map((i) => [i.siteId, i.dataUrl]))
@@ -504,6 +506,8 @@ export class LocalService {
         return { origin: s.origin, title: s.title, ...(s.description ? { description: s.description } : {}), ...(s.intranetUrl ? { intranetUrl: s.intranetUrl } : {}), ...metadata(s), ...(s.iconUrl ? { iconUrl: s.iconUrl } : {}), ...(match ? { icon: { type: match[1], data: match[2] } } : {}), links: sorted(links).filter((l) => l.siteId === s.id).map((l) => ({ path: l.path, title: l.title, ...metadata(l) })) }
       }) })) })),
       ...(full ? { local: { settings: { ...DEFAULT_SETTINGS, ...(settings.find((s) => s.key === 'system')?.value as SystemSettings | undefined) }, since: settings.find((s) => s.key === 'since')?.value ?? Date.now(), todos: sorted(todos).map((t) => ({ text: t.text, doneAt: t.doneAt, ...metadata(t) })) } } : {}),
+      // Ciphertext only: the private spaces stay locked inside the file
+      ...(full && vault ? { vault } : {}),
     }
     return { json: JSON.stringify(backup, null, 2), filename: `77bookmarks-${full ? 'full-' : ''}${new Date().toISOString().slice(0, 10)}.json` }
   }
@@ -513,6 +517,14 @@ export class LocalService {
     if (mode !== 'append' && mode !== 'replace') throw new Error('无效的导入方式')
     // All validation happens before clearing or writing any data.
     for (const d of parsed.desktops) for (const g of d.groups) for (const s of g.sites) if (s.icon) validateIcon(`data:${s.icon.type};base64,${s.icon.data}`)
+    // Restoring never removes a private space: the records of the file are added to the ones
+    // here, which is harmless to repeat should the import below fail.
+    if (mode === 'replace' && parsed.vault) {
+      const vaultTx = (await this.db()).transaction(VAULT_STORE, 'readwrite')
+      const restored = restoreVault((await vaultTx.objectStore('vault').get('vault'))?.vault, parsed.vault)
+      if (Object.keys(restored.chunks).length <= MAX_CHUNKS) await vaultTx.objectStore('vault').put({ key: 'vault', vault: restored })
+      await vaultTx.done
+    }
     return this.write(async (tx) => {
       if ((mode === 'append' ? await tx.objectStore('desktops').count() : 0) + parsed.desktops.length > MAX_DESKTOPS) throw new Error(`最多只能有 ${MAX_DESKTOPS} 个桌面`)
       if (mode === 'replace') for (const store of ['desktops', 'groups', 'sites', 'links', 'icons'] as const) await tx.objectStore(store).clear()
@@ -598,11 +610,12 @@ export class LocalService {
   async mergeRemote(remote: SyncSnapshot | null): Promise<{ snapshot: SyncSnapshot; stats: MergeStats }> {
     return this.writeSync(async (tx) => {
       const read = async () => {
-        const [desktops, groups, sites, links, todos, settings] = await Promise.all([
+        const [desktops, groups, sites, links, todos, settings, vault] = await Promise.all([
           tx.objectStore('desktops').getAll(), tx.objectStore('groups').getAll(), tx.objectStore('sites').getAll(),
           tx.objectStore('links').getAll(), tx.objectStore('todos').getAll(), tx.objectStore('settings').getAll(),
+          tx.objectStore('vault').get('vault'),
         ])
-        return { desktops, groups, sites, links, todos, settings }
+        return { desktops, groups, sites, links, todos, settings, vault: vault?.vault }
       }
       const store = tx.objectStore('sync')
       const [deviceRecord, baseRecord] = await Promise.all([store.get('device'), store.get('base')])
@@ -613,7 +626,8 @@ export class LocalService {
         && local.desktops[0].syncId === DEFAULT_DESKTOP_SYNC_ID && local.desktops[0].updatedAt === 0
         && local.groups[0].syncId === DEFAULT_GROUP_SYNC_ID && local.groups[0].updatedAt === 0
         && !local.sites.length && !local.links.length && !local.todos.length && local.settings.updatedAt === 0
-      if (pristine) local = { ...remote, deviceId }
+      // An untouched board takes the cloud copy as it is, but may already hold private spaces
+      if (pristine) local = { ...remote, deviceId, ...(local.vault ? { vault: local.vault } : {}) }
       const { snapshot, stats } = mergeSnapshots(pristine ? remote : remote ? base : null, local, remote ?? local)
       await applySnapshot(tx, snapshot)
       await this.sortSitesByUsage(tx)
@@ -621,6 +635,43 @@ export class LocalService {
       // Rebuilt from the records that were actually written, so the upload matches the database
       return { snapshot: snapshotOf(await read(), deviceId), stats }
     })
+  }
+  /** The whole board as one snapshot, which is how a private space is put away */
+  async snapshot(): Promise<SyncSnapshot> {
+    const { deviceId } = await this.syncRecords()
+    return buildSnapshot(await this.db(), deviceId)
+  }
+  /** The encrypted private spaces. Only ciphertext passes through here: keys never leave the page. */
+  async vaultRead(): Promise<Vault> {
+    const record = await (await this.db()).get('vault', 'vault')
+    if (!record) throw new Error('保险库不可用，请刷新后重试')
+    return record.vault
+  }
+  /**
+   * Stores records in the vault. `guard` names a record and what the caller last saw in it
+   * (null for "not there"): when it has changed since, somebody else wrote the same space
+   * and nothing is stored.
+   */
+  async vaultWrite(input: Record<string, string>, guard?: { id: string; value: string | null }) {
+    const chunks = parseChunks(input)
+    if (!chunks || !Object.keys(chunks).length) throw new Error('无效的保险库数据')
+    const db = await this.db()
+    const tx = db.transaction(VAULT_STORE, 'readwrite')
+    const settled = tx.done.catch(() => undefined)
+    try {
+      const record = await tx.objectStore('vault').get('vault')
+      if (!record) throw new Error('保险库不可用，请刷新后重试')
+      if (guard && (record.vault.chunks[guard.id] ?? null) !== guard.value) throw new Error('这个隐私空间已在别处被修改，请重新解锁')
+      const merged = { ...record.vault.chunks, ...chunks }
+      if (Object.keys(merged).length > MAX_CHUNKS) throw new Error('保险库已满，无法再保存')
+      await tx.objectStore('vault').put({ key: 'vault', vault: { ...record.vault, chunks: merged } })
+      await tx.done
+      return ok
+    } catch (error) {
+      try { tx.abort() } catch { /* Already aborted. */ }
+      await settled
+      throw error
+    }
   }
   /** Records the outcome of a sync run; a successful upload moves the common ancestor forward */
   async recordSyncResult(result: { pushed?: SyncSnapshot; stats?: MergeStats; error?: string }): Promise<SyncState> {
@@ -641,5 +692,5 @@ export class LocalService {
 }
 
 export type ServiceMethod = { [K in keyof LocalService]: LocalService[K] extends (...args: never[]) => unknown ? K : never }[keyof LocalService]
-export const READ_METHODS = new Set<ServiceMethod>(['board', 'search', 'settings', 'todos', 'usage', 'icon', 'exportBackup'])
-export const SERVICE_METHODS: ServiceMethod[] = ['board', 'search', 'settings', 'updateSettings', 'createDesktop', 'updateDesktop', 'deleteDesktop', 'createGroup', 'renameGroup', 'pinGroup', 'deleteGroup', 'addBookmark', 'updateSite', 'deleteSite', 'renameLink', 'deleteLink', 'order', 'todos', 'addTodo', 'updateTodo', 'deleteTodo', 'clearDoneTodos', 'orderTodos', 'recordClick', 'usage', 'icon', 'setIcon', 'removeIcon', 'exportBackup', 'importBackup', 'importChrome']
+export const READ_METHODS = new Set<ServiceMethod>(['board', 'search', 'settings', 'todos', 'usage', 'icon', 'exportBackup', 'vaultRead'])
+export const SERVICE_METHODS: ServiceMethod[] = ['board', 'search', 'settings', 'updateSettings', 'createDesktop', 'updateDesktop', 'deleteDesktop', 'createGroup', 'renameGroup', 'pinGroup', 'deleteGroup', 'addBookmark', 'updateSite', 'deleteSite', 'renameLink', 'deleteLink', 'order', 'todos', 'addTodo', 'updateTodo', 'deleteTodo', 'clearDoneTodos', 'orderTodos', 'recordClick', 'usage', 'icon', 'setIcon', 'removeIcon', 'exportBackup', 'importBackup', 'importChrome', 'vaultRead', 'vaultWrite']

@@ -16,6 +16,8 @@ await Promise.all([
     platform: 'browser',
     target: 'chrome120',
   }),
+  // Injected into the pages of the connected server, where a script cannot be a module
+  build({ entryPoints: ['clipper/bridge.ts'], outdir: 'dist-clipper', bundle: true, format: 'iife', platform: 'browser', target: 'chrome120' }),
 ])
 
 console.log('右键插件已生成：dist-clipper/（在 chrome://extensions 加载此目录）')

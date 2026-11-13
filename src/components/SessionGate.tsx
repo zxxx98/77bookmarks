@@ -3,6 +3,7 @@ import { LoaderCircle } from 'lucide-react'
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { DEFAULT_SITE_NAME } from '../../shared/settings'
 import { platform } from '../platform'
+import { privateSpace } from '../private/session'
 import { LogoutContext } from '../session'
 import { readSettings } from '../settings'
 import { LoginPage } from './LoginPage'
@@ -27,6 +28,7 @@ export function SessionGate({ children }: { children: ReactNode }) {
 
   const signedOut = useCallback(() => {
     // Nothing of the previous session may be shown to whoever signs in next
+    privateSpace.lock()
     queryClient.clear()
     setState({ status: 'out', siteName: readSettings().siteName || DEFAULT_SITE_NAME })
   }, [queryClient])

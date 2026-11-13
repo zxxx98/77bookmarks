@@ -2,6 +2,7 @@ import { parseClickCounts, totalClicks, type ClickCounts } from './counters'
 import { isView, MAX_SITE_DESCRIPTION_LENGTH, MAX_TODO_LENGTH, type View } from './types'
 import { isLayoutColumns, MAX_SITE_NAME_LENGTH, type SystemSettings } from './settings'
 import { parseBookmarkUrl, parseIconUrl, parseIntranetUrl } from './url'
+import { parseVault, type Vault } from './vault'
 
 export interface BackupMetadata {
   syncId?: string
@@ -54,6 +55,8 @@ export interface ParsedBackup {
   local?: FullBackupLocal
   desktops: BackupDesktop[]
   exportedAt: string | null
+  /** The encrypted private spaces of a full backup */
+  vault?: Vault
 }
 
 type Json = Record<string, unknown>
@@ -183,7 +186,8 @@ function parseBackupContents(input: unknown, legacyName: string): ParsedBackup |
     for (const d of desktops) { records.push(d); for (const g of d.groups) { records.push(g); for (const s of g.sites) records.push(s, ...s.links) } }
     for (const record of records) if (record.syncId) { if (seen.has(record.syncId)) return { error: '备份中的记录标识重复' }; seen.add(record.syncId) }
   }
-  return { desktops, exportedAt: typeof input.exportedAt === 'string' ? input.exportedAt : null, ...(local ? { local } : {}) }
+  const vault = input.version === 3 ? parseVault(input.vault) : null
+  return { desktops, exportedAt: typeof input.exportedAt === 'string' ? input.exportedAt : null, ...(local ? { local } : {}), ...(vault ? { vault } : {}) }
 }
 
 export function backupStats(desktops: BackupDesktop[]): { desktops: number; sites: number; links: number } {

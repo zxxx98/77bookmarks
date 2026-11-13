@@ -11,6 +11,8 @@ import { SyncSettings } from './SyncSettings'
 import { ClipperSettings } from './ClipperSettings'
 import { UpdateSettings } from './UpdateSettings'
 import { platform } from '../platform'
+import { preferences } from '../preferences'
+import { showPrivateEntry, usePrivateEntryShown } from '../private/use'
 
 type SettingsTab = 'general' | 'layout' | 'backup' | 'sync' | 'clipper' | 'update'
 
@@ -87,6 +89,7 @@ function Content({
   const [defaultIntranet, setDefaultIntranet] = useState(settings.defaultIntranet !== false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const privateEntryShown = usePrivateEntryShown()
 
   const save = async (event: FormEvent) => {
     event.preventDefault()
@@ -214,6 +217,19 @@ function Content({
             </button>
           </div>
         </form>
+        <div className="mt-5 border-t border-line pt-5">
+          <label className="flex cursor-pointer items-center gap-2.5 text-sm">
+            <input
+              type="checkbox"
+              className="size-4 shrink-0 accent-accent-solid"
+              checked={privateEntryShown}
+              onChange={(event) => showPrivateEntry(event.target.checked, preferences)}
+              aria-describedby="private-entry-hint"
+            />
+            在顶栏显示隐私空间入口
+          </label>
+          <p id="private-entry-hint" className="mt-1.5 text-xs leading-relaxed text-faint">隐私空间用密码加密保存，输入不同的密码打开不同的空间，里面的网址用无痕窗口打开。取消勾选后入口不再显示，按 Alt+P 仍可打开；这个选项只对当前浏览器生效。</p>
+        </div>
       </div>
       <div role="tabpanel" id="settings-panel-layout" aria-labelledby="settings-tab-layout" hidden={tab !== 'layout'}>
         <form onSubmit={save}>

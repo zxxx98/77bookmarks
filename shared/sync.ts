@@ -2,6 +2,7 @@ import { clickCountsOf, mergeClickCounts, parseClickCounts, totalClicks, type Cl
 import { isLayoutColumns, MAX_SITE_NAME_LENGTH, DEFAULT_SETTINGS, type SystemSettings } from './settings'
 import { isView, MAX_SITE_DESCRIPTION_LENGTH, MAX_TODO_LENGTH, type View } from './types'
 import { parseBookmarkUrl, parseIntranetUrl } from './url'
+import { mergeVaults, parseVault, type Vault } from './vault'
 
 /**
  * A sync snapshot is a flattened copy of the local database: every row carries its
@@ -11,6 +12,8 @@ import { parseBookmarkUrl, parseIntranetUrl } from './url'
  * Two kinds of local state are deliberately left out:
  * - icon data and `iconVersion`, which describe this device's own icon cache;
  * - the sync configuration, which contains the endpoint and its token.
+ *
+ * The private spaces travel along as the vault: ciphertext that only a password opens.
  */
 export const SNAPSHOT_FORMAT = '77bookmarks-sync'
 export const SNAPSHOT_VERSION = 1
@@ -92,6 +95,8 @@ export interface SyncSnapshot {
   sites: SyncSite[]
   links: SyncLink[]
   todos: SyncTodo[]
+  /** Absent in snapshots written before private spaces existed */
+  vault?: Vault
 }
 
 export interface MergeStats {
@@ -244,6 +249,7 @@ export function parseSnapshot(input: unknown): SyncSnapshot | null {
     links.push({ ...base, siteSyncId: parent, path, title, clicks: count(item.clicks), clickCounts: parseClickCounts(item.clickCounts) ?? clickCountsOf({ clicks: count(item.clicks) }), lastClickedAt: moment(item.lastClickedAt) })
   }
 
+  const vault = parseVault(input.vault)
   const todos: SyncTodo[] = []
   for (const item of list(input.todos, LIMITS.todos)) {
     const base = row(item)
@@ -263,6 +269,7 @@ export function parseSnapshot(input: unknown): SyncSnapshot | null {
       updatedAt: stamp(input.settings.updatedAt),
     },
     desktops, groups, sites, links, todos,
+    ...(vault ? { vault } : {}),
   }
 }
 
@@ -291,7 +298,7 @@ export function snapshotFingerprint(snapshot: SyncSnapshot): string {
   }
   return JSON.stringify([
     rows(snapshot.desktops), rows(snapshot.groups), rows(snapshot.sites), rows(snapshot.links), rows(snapshot.todos),
-    snapshot.settings, snapshot.since,
+    snapshot.settings, snapshot.since, snapshot.vault ?? null,
   ], canonical)
 }
 
@@ -592,5 +599,7 @@ export function mergeSnapshots(ancestor: SyncSnapshot | null, local: SyncSnapsho
     links: mergeStore<SyncLink>(ancestor && byId(ancestor.links), byId(local.links), byId(remote.links), stats, firstSync),
     todos: mergeStore(ancestor && byId(ancestor.todos), byId(local.todos), byId(remote.todos), stats, firstSync),
   }
+  const vault = mergeVaults(ancestor?.vault, local.vault, remote.vault)
+  if (vault) merged.vault = vault
   return { snapshot: repair(merged, ancestor), stats }
 }

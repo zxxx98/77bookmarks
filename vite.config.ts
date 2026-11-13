@@ -16,6 +16,8 @@ export default defineConfig({
       { extends: true, test: { name: 'app', include: ['src/**/*.test.ts', 'shared/**/*.test.ts', 'sync-worker/**/*.test.ts', 'server/**/*.test.ts', 'clipper/**/*.test.ts'] } },
       // The storage tests again, on the SQLite backend of the self-hosted server
       { extends: true, test: { name: 'sqlite', include: ['src/storage/service.test.ts', 'src/storage/db.test.ts', 'src/sync/engine.test.ts'], setupFiles: ['server/test-sqlite.ts'] } },
+      // And once more on the in-memory backend an unlocked private space runs on
+      { extends: true, test: { name: 'memory', include: ['src/storage/service.test.ts', 'src/storage/db.test.ts', 'src/sync/engine.test.ts'], setupFiles: ['src/storage/test-memory.ts'] } },
     ],
   },
   build: selfhost ? { outDir: 'dist-selfhost/public', emptyOutDir: true } : {

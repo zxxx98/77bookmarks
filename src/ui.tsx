@@ -1,6 +1,8 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { AnimatePresence, motion } from 'motion/react'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { openInIncognito } from './private/open'
+import { privateSpace } from './private/session'
 import { AlertCircle, CheckCircle2, Globe, LoaderCircle, Network, X } from 'lucide-react'
 
 interface ConfirmOptions {
@@ -25,6 +27,8 @@ interface Ui {
 }
 
 export function navigateToUrl(url: string, openInNewTab: boolean) {
+  // Nothing opened from a private space may land in this window's history
+  if (privateSpace.active()) { void openInIncognito(url); return }
   if (openInNewTab) {
     window.open(url, '_blank', 'noreferrer')
   } else {
@@ -119,7 +123,8 @@ export function UiProvider({ children }: { children: ReactNode }) {
       confirm: (options) => new Promise((resolve) => setPending({ ...options, resolve })),
       openBookmark(options) {
         cancelProbe()
-        if (options.defaultIntranet === false) {
+        // Probing would reach for the address from this window, which a private space never does
+        if (options.defaultIntranet === false || privateSpace.active()) {
           setNetworkChoice(options)
           return
         }

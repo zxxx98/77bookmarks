@@ -3,14 +3,17 @@ import { openDB, type DBSchema, type IDBPDatabase, type IDBPTransaction } from '
 import { DEFAULT_SETTINGS, type SystemSettings } from '../../shared/settings'
 import { DEFAULT_DESKTOP_NAME, DEFAULT_DESKTOP_SYNC_ID, DEFAULT_GROUP_NAME, DEFAULT_GROUP_SYNC_ID, SEEDED_AT, type SyncSnapshot } from '../../shared/sync'
 import type { View } from '../../shared/types'
+import { createVault, type Vault } from '../../shared/vault'
 import { EMPTY_SYNC_CONFIG, EMPTY_SYNC_STATE, type SyncConfig, type SyncState } from '../sync/types'
 import { createSyncId } from './uuid'
 
 export const DATABASE_NAME = '77bookmarks-local'
-export const DATABASE_VERSION = 2
+export const DATABASE_VERSION = 3
 export const STORES = ['desktops', 'groups', 'sites', 'links', 'icons', 'todos', 'settings'] as const
 /** Cloud-sync bookkeeping: kept apart from the data so backups never contain it */
 export const SYNC_STORE = 'sync'
+/** The encrypted private spaces, as one record: see `shared/vault.ts` */
+export const VAULT_STORE = 'vault'
 export type StoreName = typeof STORES[number]
 export interface Entity {
   id: number
@@ -36,6 +39,7 @@ export type SyncRecord =
   | { key: 'device'; deviceId: string }
   | { key: 'config'; config: SyncConfig }
   | { key: 'state'; state: SyncState }
+export interface VaultRecord { key: 'vault'; vault: Vault }
 export interface LocalSchema extends DBSchema {
   desktops: { key: number; value: DesktopRow }
   groups: { key: number; value: GroupRow; indexes: { desktopId: number } }
@@ -45,10 +49,11 @@ export interface LocalSchema extends DBSchema {
   todos: { key: number; value: TodoRow }
   settings: { key: string; value: SettingsRow }
   sync: { key: string; value: SyncRecord }
+  vault: { key: string; value: VaultRecord }
 }
 export type LocalDatabase = IDBPDatabase<LocalSchema>
 export type WriteTransaction = IDBPTransaction<LocalSchema, StoreName[], 'readwrite'>
-export type SyncTransaction = IDBPTransaction<LocalSchema, [...StoreName[], typeof SYNC_STORE], 'readwrite'>
+export type SyncTransaction = IDBPTransaction<LocalSchema, [...StoreName[], typeof SYNC_STORE, typeof VAULT_STORE], 'readwrite'>
 
 export function entity(position = 0): Omit<Entity, 'id'> {
   const now = Date.now()
@@ -81,6 +86,7 @@ export async function openLocalDatabase(name = DATABASE_NAME): Promise<LocalData
         db.createObjectStore('settings', { keyPath: 'key' })
       }
       if (oldVersion < 2) db.createObjectStore('sync', { keyPath: 'key' })
+      if (oldVersion < 3) db.createObjectStore('vault', { keyPath: 'key' })
     },
     blocking() { db.close() },
   })
@@ -89,7 +95,7 @@ export async function openLocalDatabase(name = DATABASE_NAME): Promise<LocalData
 }
 
 /** First-run records, shared by every storage backend the service can run on */
-export async function seedDatabase(db: LocalDatabase): Promise<void> {
+export async function seedDatabase(db: LocalDatabase, options: { vault?: boolean } = {}): Promise<void> {
   // Initialization is transactional, including concurrent first opens from different tabs.
   const tx = db.transaction(['desktops', 'groups', 'settings'], 'readwrite')
   if (!(await tx.objectStore('settings').get('initialized'))) {
@@ -117,4 +123,11 @@ export async function seedDatabase(db: LocalDatabase): Promise<void> {
     await store.put({ key: 'base', snapshot: null })
   }
   await sync.done
+  // Every installation has a vault from the start, so that having one says nothing about
+  // whether a private space was ever created. A private space itself has none.
+  if (options.vault === false) return
+  const created = createVault()
+  const vault = db.transaction(VAULT_STORE, 'readwrite')
+  if (!(await vault.objectStore('vault').get('vault'))) await vault.objectStore('vault').put({ key: 'vault', vault: created })
+  await vault.done
 }

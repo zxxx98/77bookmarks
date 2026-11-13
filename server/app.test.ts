@@ -147,12 +147,23 @@ describe('the right-click extension', () => {
     expect(added.value.result).toBe('site_created')
     // No page is open to ask for the icon, so the server fetches it by itself
     await vi.waitFor(async () => expect((await rpc({ cookie }, 'icon', added.value.siteId)).value).toBe(ICON))
-    for (const method of ['deleteSite', 'exportBackup', 'importBackup', 'updateSettings', 'usage', 'todos']) {
+    for (const method of ['deleteSite', 'exportBackup', 'importBackup', 'updateSettings', 'usage', 'todos', 'vaultRead', 'vaultWrite']) {
       expect((await rpc(bearer, method, 1)).status).toBe(403)
     }
     expect((await send('/api/token', { method: 'POST', headers: bearer })).status).toBe(403)
     expect((await send('/api/sync', { body: { method: 'status', args: [] }, headers: bearer })).status).toBe(403)
     expect((await send('/api/events', { headers: bearer })).status).toBe(403)
+  })
+  it('stores the vault of private spaces for a signed-in page, as ciphertext it cannot read', async () => {
+    const { cookie } = await login()
+    expect((await rpc({}, 'vaultRead')).status).toBe(401)
+    const vault = (await rpc({ cookie }, 'vaultRead')).value
+    const [[id, chunk], [, other]] = Object.entries(vault.chunks) as [string, string][]
+    expect((await rpc({ cookie }, 'vaultWrite', { [id]: other }, { id, value: other })).status).toBe(400)
+    expect((await rpc({ cookie }, 'vaultWrite', { [id]: other }, { id, value: chunk })).status).toBe(200)
+    expect((await rpc({ cookie }, 'vaultRead')).value.chunks[id]).toBe(other)
+    // The board's own snapshot is not something a page may ask for by name
+    expect((await rpc({ cookie }, 'snapshot')).status).toBe(400)
   })
   it('accepts a token from any origin, since the extension is not the page', async () => {
     const { bearer } = await connect()

@@ -74,6 +74,24 @@ export const selfhostPlatform: Platform = {
     // The server reads the page: no browser permission is involved and no CORS applies
     return { status: 'ok', html: (await request<{ html: string | null }>('/page-title', 'POST', { url })).html }
   },
+  incognito: {
+    // A page has no way to open an incognito window; the right-click extension does, and
+    // announces itself on the pages of the server it is connected to
+    open(url) {
+      if (document.documentElement.dataset.bookmarks77Clipper !== '1') return Promise.resolve(false)
+      return new Promise<boolean>((resolve) => {
+        const id = crypto.getRandomValues(new Uint32Array(2)).join('-')
+        const finish = (ok: boolean) => { clearTimeout(timer); window.removeEventListener('message', onMessage); resolve(ok) }
+        const onMessage = (event: MessageEvent) => {
+          if (event.source !== window || event.data?.source !== '77bookmarks-clipper' || event.data.id !== id) return
+          finish(event.data.ok === true)
+        }
+        const timer = setTimeout(() => finish(false), 2500)
+        window.addEventListener('message', onMessage)
+        window.postMessage({ source: '77bookmarks-page', type: 'open-incognito', id, url }, window.location.origin)
+      })
+    },
+  },
   session: {
     status: () => request<{ authenticated: boolean; siteName: string }>('/session'),
     login: async (password) => { await request('/login', 'POST', { password }) },

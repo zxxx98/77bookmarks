@@ -85,6 +85,29 @@ export const extensionPlatform: Platform = {
     const response = await chrome.runtime.sendMessage({ type: TITLE_MESSAGE, url })
     return { status: 'ok', html: typeof response?.html === 'string' ? response.html : null }
   },
+  // An extension may open incognito windows without being allowed to run inside them
+  get incognito() {
+    if (typeof chrome === 'undefined' || !chrome.windows?.create) return undefined
+    return {
+      async open(url: string) {
+        try {
+          // Incognito windows are only listed once the user let the extension into them;
+          // until then every address gets a window of its own, in the same incognito session
+          const windows = await chrome.windows.getAll({ windowTypes: ['normal'] }).catch(() => [])
+          const existing = windows.find((window) => window.incognito && window.id !== undefined)
+          if (existing?.id !== undefined) {
+            await chrome.tabs.create({ windowId: existing.id, url })
+            await chrome.windows.update(existing.id, { focused: true })
+          } else {
+            await chrome.windows.create({ url, incognito: true, focused: true })
+          }
+          return true
+        } catch {
+          return false // Incognito is switched off for this browser, or the address is not allowed there
+        }
+      },
+    }
+  },
   // Looked up on every use: the preview has no such API and says so in the sync settings
   get hostAccess() {
     if (typeof chrome === 'undefined' || !chrome.permissions) return undefined

@@ -15,6 +15,8 @@ import { recordClick } from './clicks'
 import { AddBookmarkDialog } from './components/AddBookmarkDialog'
 import { BoardView } from './components/BoardView'
 import { CreateGroupDialog } from './components/CreateGroupDialog'
+import { PrivateSpaceDialogs, type PrivateAction } from './components/PrivateSpace'
+import { privateSpace } from './private/session'
 import { EditSiteDialog } from './components/EditSiteDialog'
 import { SettingsDialog } from './components/SettingsDialog'
 import { TodoPanel } from './components/TodoPanel'
@@ -25,7 +27,7 @@ import { useLazyIcons } from './lazy-icons'
 import { searchBoard } from './search'
 import { readSettings } from './settings'
 import { useTodos } from './todos'
-import { UiProvider, useUi } from './ui'
+import { navigateToUrl, UiProvider, useUi } from './ui'
 
 const DESKTOP_KEY = 'desktop'
 const SWIPE_DISTANCE = 70
@@ -45,7 +47,10 @@ function canUseGlobalShortcut(event: KeyboardEvent | ClipboardEvent) {
 
 export default function App() {
   const queryClient = useQueryClient()
-  const [desktopId, setDesktopId] = useState(() => Number(localStorage.getItem(DESKTOP_KEY)))
+  // The interface starts over when a private space opens or closes, so this holds for its lifetime.
+  // Which desktop of a private space was shown is nobody's business and is not remembered.
+  const [isPrivate] = useState(privateSpace.active)
+  const [desktopId, setDesktopId] = useState(() => (isPrivate ? 0 : Number(localStorage.getItem(DESKTOP_KEY))))
   const previousPage = useRef<BoardPage | undefined>(undefined)
   const board = useQuery({
     queryKey: ['board', desktopId],
@@ -79,12 +84,12 @@ export default function App() {
     if (!board.data || board.isPlaceholderData) return
     previousPage.current = board.data
     const resolvedId = board.data.desktop.id
-    preferences.setItem(DESKTOP_KEY, String(resolvedId))
+    if (!isPrivate) preferences.setItem(DESKTOP_KEY, String(resolvedId))
     if (desktopId !== resolvedId) {
       queryClient.setQueryData(['board', resolvedId], board.data)
       setDesktopId(resolvedId)
     }
-  }, [board.data, board.isPlaceholderData, desktopId, queryClient])
+  }, [board.data, board.isPlaceholderData, desktopId, queryClient, isPrivate])
 
   const page = board.data ?? previousPage.current
   if (page) return (
@@ -100,6 +105,7 @@ export default function App() {
         settingsError={settings.isError}
         onRetrySettings={() => { void settings.refetch() }}
         settings={systemSettings}
+        isPrivate={isPrivate}
       />
     </UiProvider>
   )
@@ -133,9 +139,11 @@ interface HomeProps {
   settingsError: boolean
   onRetrySettings: () => void
   settings: SystemSettings
+  /** A private space is shown instead of the ordinary board */
+  isPrivate: boolean
 }
 
-function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBoard, settingsReady, settingsError, onRetrySettings, settings }: HomeProps) {
+function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBoard, settingsReady, settingsError, onRetrySettings, settings, isPrivate }: HomeProps) {
   const { siteName, openInNewTab, layoutColumns, defaultIntranet = true } = settings
   const queryClient = useQueryClient()
   const { toast, openBookmark } = useUi()
@@ -147,6 +155,7 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
   const [creatingGroup, setCreatingGroup] = useState<{ id: number; name: string } | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [usageOpen, setUsageOpen] = useState(false)
+  const [privateAction, setPrivateAction] = useState<PrivateAction | null>(null)
   const todos = useTodos()
   // Remembered per browser, like the desktop shown
   const [todoOpen, setTodoOpen] = useState(storedTodoOpen)
@@ -212,11 +221,12 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
   const result = useMemo(() => searchBoard(desktop.groups, query), [desktop.groups, query])
   const searching = query.trim() !== ''
 
-  useLazyIcons(loading ? undefined : desktop)
+  // Fetching an icon would tell the site, or the server, which sites a private space holds
+  useLazyIcons(loading || isPrivate ? undefined : desktop)
 
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<Set<number>>(() => {
     try {
-      const raw = localStorage.getItem(`collapsed-groups-${desktop.id}`)
+      const raw = isPrivate ? null : localStorage.getItem(`collapsed-groups-${desktop.id}`)
       return raw ? new Set(JSON.parse(raw)) : new Set()
     } catch {
       return new Set()
@@ -225,12 +235,12 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem(`collapsed-groups-${desktop.id}`)
+      const raw = isPrivate ? null : localStorage.getItem(`collapsed-groups-${desktop.id}`)
       setCollapsedGroupIds(raw ? new Set(JSON.parse(raw)) : new Set())
     } catch {
       setCollapsedGroupIds(new Set())
     }
-  }, [desktop.id])
+  }, [desktop.id, isPrivate])
 
   const allCollapsed = desktop.groups.length > 0 && desktop.groups.every((g) => collapsedGroupIds.has(g.id))
 
@@ -239,11 +249,11 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
       const isAll = desktop.groups.length > 0 && desktop.groups.every((g) => prev.has(g.id))
       const next = isAll ? new Set<number>() : new Set(desktop.groups.map((g) => g.id))
       try {
-        preferences.setItem(`collapsed-groups-${desktop.id}`, JSON.stringify([...next]))
+        if (!isPrivate) preferences.setItem(`collapsed-groups-${desktop.id}`, JSON.stringify([...next]))
       } catch {}
       return next
     })
-  }, [desktop.groups, desktop.id])
+  }, [desktop.groups, desktop.id, isPrivate])
 
   const toggleGroupCollapse = useCallback((groupId: number) => {
     setCollapsedGroupIds((prev) => {
@@ -254,11 +264,11 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
         next.add(groupId)
       }
       try {
-        preferences.setItem(`collapsed-groups-${desktop.id}`, JSON.stringify([...next]))
+        if (!isPrivate) preferences.setItem(`collapsed-groups-${desktop.id}`, JSON.stringify([...next]))
       } catch {}
       return next
     })
-  }, [desktop.id])
+  }, [desktop.id, isPrivate])
 
   // Only aggregate counts cross the network while searching another desktop.
   const [searchTerm, setSearchTerm] = useState('')
@@ -296,6 +306,14 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
         return
       }
 
+      // Opens the way into the private spaces, and is the quickest way out of one
+      if (event.altKey && (event.key.toLowerCase() === 'p' || event.code === 'KeyP')) {
+        event.preventDefault()
+        if (isPrivate) privateSpace.lock()
+        else setPrivateAction('unlock')
+        return
+      }
+
       if (event.altKey) return
 
       if (editing && (event.key === 'Enter' || event.key === 'Escape')) {
@@ -329,7 +347,7 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('paste', onPaste)
     }
-  }, [desktops.length, editing, stepDesktop, loading, toggleCollapseAll, showTodos])
+  }, [desktops.length, editing, stepDesktop, loading, toggleCollapseAll, showTodos, isPrivate])
 
   // A horizontal swipe switches desktops on touch screens. Off in edit mode, where touches drag cards
   const touchStart = useRef<{ x: number; y: number } | null>(null)
@@ -352,12 +370,7 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
   const handleSearchEngine = useCallback(() => {
     const trimmed = query.trim()
     if (!trimmed) return
-    const url = engine.buildUrl(trimmed)
-    if (openInNewTab) {
-      window.open(url, '_blank', 'noreferrer')
-    } else {
-      window.location.assign(url)
-    }
+    navigateToUrl(engine.buildUrl(trimmed), openInNewTab)
   }, [engine, query, openInNewTab])
 
   const handleSearchBookmark = useCallback(() => {
@@ -373,11 +386,7 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
       })
       return
     }
-    if (openInNewTab) {
-      window.open(result.firstUrl, '_blank', 'noreferrer')
-    } else {
-      window.location.assign(result.firstUrl)
-    }
+    navigateToUrl(result.firstUrl, openInNewTab)
   }, [result.firstUrl, result.firstIntranetUrl, result.firstTitle, result.firstTarget, openInNewTab, defaultIntranet, openBookmark])
 
   return (
@@ -401,7 +410,8 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
         onAdd={() => !loading && setAddingUrl('')}
         onCreateGroup={() => !loading && setCreatingGroup({ id: desktop.id, name: desktop.name })}
         onSettings={() => setSettingsOpen(true)}
-        onUsage={() => setUsageOpen(true)}
+        onUsage={() => (isPrivate ? toast('隐私空间里不记录使用统计') : setUsageOpen(true))}
+        onPrivate={setPrivateAction}
         todoOpen={todoOpen}
         todoCount={todos.todos?.filter((todo) => todo.doneAt === null).length}
         onToggleTodos={() => showTodos(!todoOpen)}
@@ -507,6 +517,7 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
         </motion.div>
         </div>
       </main>
+      <PrivateSpaceDialogs action={privateAction} onClose={() => setPrivateAction(null)} />
       <AddBookmarkDialog open={addingUrl !== null} initialUrl={addingUrl ?? ''} onClose={() => setAddingUrl(null)} desktop={desktop} />
       {creatingGroup && <CreateGroupDialog desktop={creatingGroup} onClose={() => setCreatingGroup(null)} onCreated={() => { setQuery(''); setCreatingGroup(null) }} />}
       <EditSiteDialog site={editingSite} desktop={desktop} desktops={desktops} onClose={() => setEditingSiteId(null)} />
