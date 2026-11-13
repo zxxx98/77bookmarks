@@ -93,3 +93,50 @@ export function fallbackLinkTitle(path: string): string {
     return segment
   }
 }
+
+const FRAGMENT_EXACT_MAX = 120
+const FRAGMENT_EDGE_MAX = 40
+
+function encodeFragmentText(text: string): string {
+  // A dash separates the prefix and suffix of a text directive, so it has to be escaped too
+  return encodeURIComponent(text).replace(/-/g, '%2D')
+}
+
+/** Leading (or trailing) whole words of a line, about FRAGMENT_EDGE_MAX characters of them */
+function edgeWords(line: string, fromEnd: boolean): string {
+  const words = [...new Intl.Segmenter(undefined, { granularity: 'word' }).segment(line)].map((part) => part.segment)
+  if (fromEnd) words.reverse()
+  let edge = ''
+  for (const word of words) {
+    if (edge.trim() && edge.length + word.length > FRAGMENT_EDGE_MAX) break
+    edge = fromEnd ? word + edge : edge + word
+  }
+  return edge
+}
+
+/**
+ * Address that makes the browser scroll to the selected text and highlight it
+ * (a `#:~:text=` text fragment). Long or multi-paragraph selections are stored as
+ * their first and last words, since one quote cannot span paragraphs.
+ */
+export function textFragmentUrl(url: string, selection: string): string {
+  const lines = selection.split(/[\r\n\t]+/).map((line) => line.replace(/\s+/g, ' ').trim()).filter(Boolean)
+  if (!lines.length) return url
+  const first = lines[0]
+  const last = lines[lines.length - 1]
+  let directive: string
+  if (lines.length === 1 && first.length <= FRAGMENT_EXACT_MAX) {
+    directive = encodeFragmentText(first)
+  } else {
+    const start = edgeWords(first, false)
+    const end = edgeWords(lines.length === 1 ? first.slice(start.length) : last, true).trim()
+    directive = encodeFragmentText(start.trim()) + (end ? `,${encodeFragmentText(end)}` : '')
+  }
+  const base = url.replace(/:~:.*$/, '')
+  return `${base}${base.includes('#') ? '' : '#'}:~:text=${directive}`
+}
+
+/** Link title for a bookmarked selection */
+export function selectionTitle(selection: string): string {
+  return selection.replace(/\s+/g, ' ').trim().slice(0, 80)
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fallbackLinkTitle, fullIntranetUrl, fullUrl, hostOf, parseBookmarkUrl, parseIconUrl, parseIntranetUrl } from './url'
+import { fallbackLinkTitle, fullIntranetUrl, fullUrl, hostOf, parseBookmarkUrl, parseIconUrl, parseIntranetUrl, selectionTitle, textFragmentUrl } from './url'
 
 describe('parseBookmarkUrl', () => {
   it('adds https when the scheme is missing', () => {
@@ -102,5 +102,52 @@ describe('helpers', () => {
     expect(parseIntranetUrl('not a url')).toBeNull()
     expect(fullIntranetUrl('http://192.168.1.100:8080', '/docs')).toBe('http://192.168.1.100:8080/docs')
     expect(fullIntranetUrl('http://192.168.1.100:8080', null)).toBe('http://192.168.1.100:8080')
+  })
+})
+
+describe('textFragmentUrl', () => {
+  it('quotes a short selection exactly', () => {
+    expect(textFragmentUrl('https://a.com/post', '  hello   world ')).toBe('https://a.com/post#:~:text=hello%20world')
+  })
+
+  it('escapes the characters that separate directive parts', () => {
+    expect(textFragmentUrl('https://a.com/', 'a-b, c&d')).toBe('https://a.com/#:~:text=a%2Db%2C%20c%26d')
+  })
+
+  it('keeps an existing anchor and replaces an existing directive', () => {
+    expect(textFragmentUrl('https://a.com/p#intro', '你好')).toBe(`https://a.com/p#intro:~:text=${encodeURIComponent('你好')}`)
+    expect(textFragmentUrl('https://a.com/p#:~:text=old', 'new')).toBe('https://a.com/p#:~:text=new')
+  })
+
+  it('stores the two ends of a selection that spans paragraphs', () => {
+    expect(textFragmentUrl('https://a.com/p', 'First paragraph here.\n\nSecond one ends')).toBe(
+      'https://a.com/p#:~:text=First%20paragraph%20here.,Second%20one%20ends',
+    )
+  })
+
+  it('stores the two ends of a long selection as whole words', () => {
+    const words = Array.from({ length: 40 }, (_, i) => `word${i}`)
+    const directive = textFragmentUrl('https://a.com/p', words.join(' ')).split(':~:text=')[1]
+    const [start, end] = directive.split(',').map(decodeURIComponent)
+    expect(words.join(' ').startsWith(start + ' ')).toBe(true)
+    expect(words.join(' ').endsWith(' ' + end)).toBe(true)
+    expect(start.length).toBeLessThanOrEqual(40)
+    expect(end.length).toBeLessThanOrEqual(40)
+  })
+
+  it('survives bookmark parsing', () => {
+    const url = textFragmentUrl('https://a.com/p', 'hello world')
+    expect(parseBookmarkUrl(url)?.path).toBe('/p#:~:text=hello%20world')
+  })
+
+  it('leaves the address alone when nothing is selected', () => {
+    expect(textFragmentUrl('https://a.com/p', ' \n ')).toBe('https://a.com/p')
+  })
+})
+
+describe('selectionTitle', () => {
+  it('collapses whitespace and caps the length', () => {
+    expect(selectionTitle(' a\n b ')).toBe('a b')
+    expect(selectionTitle('x'.repeat(200))).toHaveLength(80)
   })
 })

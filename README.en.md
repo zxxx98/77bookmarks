@@ -60,7 +60,7 @@ npm run build:clipper
 1. Open `chrome://extensions` (or `edge://extensions`), enable **Developer mode**, and load the extracted folder or **`dist-clipper/`**.
 2. Sign in to your self-hosted web app, open **More → System Settings → Right-Click Clipper** (`更多 → 系统设置 → 右键插件`), and click **Generate Connection Code** (`生成连接码`).
 3. Click the clipper extension icon (or open its Options page), paste the connection code, grant access to your server URL, and choose a default desktop and group.
-4. You can now right-click any page or link and choose **Add current page to 77 Bookmarks** or **Add this link to 77 Bookmarks**.
+4. You can now right-click any page or link and choose **Add current page to 77 Bookmarks** or **Add this link to 77 Bookmarks**, or select text first and choose **Add selected text to 77 Bookmarks**.
 
 The clipper only requests `contextMenus`, `storage`, `activeTab`, `scripting`, and permission for your specific server URL. Connection codes only allow reading desktops/groups and adding bookmarks—they cannot modify, delete, or export data.
 
@@ -89,6 +89,7 @@ If multiple extensions override the New Tab page, enable the one you want in `ch
 - Click the toolbar icon, pick a desktop and group, and save the current page.
 - Right-click on any blank area of a page and select **Add current page to 77 Bookmarks**.
 - Right-click on a link and select **Add this link to 77 Bookmarks**.
+- Select some text, right-click it and choose **Add selected text to 77 Bookmarks** (`添加选中文字到 77 Bookmarks`). The bookmark is named after the selection, and opening it makes the browser scroll to that text and highlight it; if the page has changed and the text is gone, it opens as a normal link.
 - Default keyboard shortcut: `Alt+Shift+B` (customizable at `chrome://extensions/shortcuts`).
 - Context menus and shortcuts remember the last desktop and group selected in the popup, falling back to the first desktop and default group if deleted.
 - On the bookmark board, you can also paste a URL directly or click **Add** (`添加`).
