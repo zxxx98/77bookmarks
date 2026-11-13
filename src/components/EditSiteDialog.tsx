@@ -1,7 +1,7 @@
 import { ImageUp, LoaderCircle, RefreshCw, Trash2 } from 'lucide-react'
 import { useRef, useState, type ChangeEvent, type FormEvent } from 'react'
-import type { Desktop, DesktopSummary, Site } from '../../shared/types'
-import { hostOf, parseIconUrl } from '../../shared/url'
+import { MAX_SITE_DESCRIPTION_LENGTH, type Desktop, type DesktopSummary, type Site } from '../../shared/types'
+import { hostOf, parseIconUrl, parseIntranetUrl } from '../../shared/url'
 import { api } from '../api'
 import { Dialog, useAct, useUi } from '../ui'
 import { SiteIcon } from './SiteIcon'
@@ -92,6 +92,25 @@ function Editor({ site, desktop, desktops }: { site: Site; desktop: Desktop; des
     if (title && title !== site.title) void act(() => api.updateSite(site.id, { title }))
   }
 
+  const saveDescription = (value: string) => {
+    const description = value.trim()
+    if (description !== (site.description ?? '')) void act(() => api.updateSite(site.id, { description }))
+  }
+
+  const saveIntranetUrl = (value: string) => {
+    const raw = value.trim()
+    if (!raw) {
+      if (site.intranetUrl) void act(() => api.updateSite(site.id, { intranetUrl: null }))
+      return
+    }
+    const parsed = parseIntranetUrl(raw)
+    if (!parsed) {
+      toast('无效的内网地址', 'error')
+      return
+    }
+    if (parsed !== site.intranetUrl) void act(() => api.updateSite(site.id, { intranetUrl: parsed }))
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-center gap-3">
@@ -164,6 +183,39 @@ function Editor({ site, desktop, desktops }: { site: Site; desktop: Desktop; des
           onBlur={(event) => saveTitle(event.target.value)}
           onKeyDown={(event) => event.key === 'Enter' && event.currentTarget.blur()}
         />
+      </div>
+
+      <div>
+        <label className="label" htmlFor="site-description">
+          描述
+        </label>
+        <input
+          id="site-description"
+          className="input"
+          defaultValue={site.description ?? ''}
+          maxLength={MAX_SITE_DESCRIPTION_LENGTH}
+          placeholder="添加简短描述（可选）"
+          onBlur={(event) => saveDescription(event.target.value)}
+          onKeyDown={(event) => event.key === 'Enter' && event.currentTarget.blur()}
+        />
+      </div>
+
+      <div>
+        <label className="label" htmlFor="site-intranet-url">
+          内网地址
+        </label>
+        <input
+          id="site-intranet-url"
+          className="input"
+          defaultValue={site.intranetUrl ?? ''}
+          maxLength={2000}
+          placeholder="例如 http://192.168.1.100:8080（可选）"
+          autoComplete="off"
+          spellCheck={false}
+          onBlur={(event) => saveIntranetUrl(event.target.value)}
+          onKeyDown={(event) => event.key === 'Enter' && event.currentTarget.blur()}
+        />
+        <p className="mt-1.5 text-xs text-faint">配置后点击书签可根据设置自动探测跳转内网，或弹出内外网选择面板。</p>
       </div>
 
       {groups.length > 1 && (

@@ -6,7 +6,7 @@ const groups: Group[] = [{
   id: 1,
   name: '默认',
   sites: [
-    { id: 10, origin: 'https://docs.example', title: 'Docs', iconVersion: 0, iconUrl: null, links: [{ id: 100, path: '/api/reference', title: 'API' }] },
+    { id: 10, origin: 'https://docs.example', title: 'Docs', description: '内部开发手册', intranetUrl: 'http://192.168.1.10:8080', iconVersion: 0, iconUrl: null, links: [{ id: 100, path: '/api/reference', title: 'API' }] },
     { id: 11, origin: 'https://mail.example', title: 'Mail', iconVersion: 0, iconUrl: null, links: [] },
   ],
 } as Group]
@@ -14,6 +14,7 @@ const groups: Group[] = [{
 describe('board search', () => {
   it('opens and counts the card itself when the card matches', () => {
     expect(searchBoard(groups, 'mail')).toMatchObject({ firstUrl: 'https://mail.example', firstTarget: { siteId: 11 } })
+    expect(searchBoard(groups, '开发手册')).toMatchObject({ firstUrl: 'https://docs.example', firstIntranetUrl: 'http://192.168.1.10:8080', firstTarget: { siteId: 10 } })
   })
 
   it('opens and counts the matching link when only a link matches', () => {

@@ -35,6 +35,7 @@ export function parseBookmarkUrl(input: string): ParsedBookmark | null {
 }
 
 const MAX_ICON_URL = 2000
+const MAX_INTRANET_URL = 2000
 
 /** Normalized http(s) address of a custom icon image, or null */
 export function parseIconUrl(input: string): string | null {
@@ -49,6 +50,28 @@ export function parseIconUrl(input: string): string | null {
   } catch {
     return null
   }
+}
+
+/** Normalized http(s) address of an intranet URL, or null */
+export function parseIntranetUrl(input: string): string | null {
+  const raw = input.trim()
+  if (!raw || raw.length > MAX_INTRANET_URL || /\s/.test(raw)) return null
+  const typedScheme = HAS_SCHEME.test(raw)
+  try {
+    const url = new URL(typedScheme ? raw : `http://${raw}`)
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null
+    if (url.username || url.password) return null
+    if (!typedScheme && !url.hostname.includes('.') && url.hostname !== 'localhost' && !/^\d+(\.\d+){3}$/.test(url.hostname)) return null
+    const path = url.pathname + url.search + url.hash
+    return path === '/' ? url.origin : url.origin + path
+  } catch {
+    return null
+  }
+}
+
+export function fullIntranetUrl(intranetUrl: string, path: string | null): string {
+  if (!path) return intranetUrl
+  return intranetUrl.replace(/\/+$/, '') + path
 }
 
 export function hostOf(origin: string): string {

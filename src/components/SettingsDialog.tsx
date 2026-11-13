@@ -26,7 +26,7 @@ interface Props {
 export function SettingsDialog({ open, ready, loadError, onRetry, ...props }: Props) {
   const [importBusy, setImportBusy] = useState(false)
   return (
-    <Dialog open={open} onClose={() => { if (!importBusy) props.onClose() }} closeDisabled={importBusy} title="系统设置" width="max-w-lg">
+    <Dialog open={open} onClose={() => { if (!importBusy) props.onClose() }} closeDisabled={importBusy} title="系统设置" width="max-w-xl">
       {ready ? <Content {...props} importBusy={importBusy} onBusyChange={setImportBusy} /> : (
         <div className="grid place-items-center gap-3 py-8 text-sm text-muted" role="status">
           {loadError ? <>
@@ -47,6 +47,7 @@ function Content({ settings, importBusy, onBusyChange, ...backupProps }: Omit<Pr
   const [openInNewTab, setOpenInNewTab] = useState(settings.openInNewTab)
   const [layoutColumns, setLayoutColumns] = useState(settings.layoutColumns)
   const [autoSortByUsage, setAutoSortByUsage] = useState(settings.autoSortByUsage)
+  const [defaultIntranet, setDefaultIntranet] = useState(settings.defaultIntranet !== false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -56,12 +57,13 @@ function Content({ settings, importBusy, onBusyChange, ...backupProps }: Omit<Pr
     setSaving(true)
     setError('')
     try {
-      const settings = await api.updateSettings({ siteName: name.trim(), openInNewTab, layoutColumns, autoSortByUsage })
+      const settings = await api.updateSettings({ siteName: name.trim(), openInNewTab, layoutColumns, autoSortByUsage, defaultIntranet })
       queryClient.setQueryData<SystemSettings>(['settings'], settings)
       setName(settings.siteName)
       setOpenInNewTab(settings.openInNewTab)
       setLayoutColumns(settings.layoutColumns)
       setAutoSortByUsage(settings.autoSortByUsage)
+      setDefaultIntranet(settings.defaultIntranet !== false)
       toast('设置已保存')
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存失败，请重试')
@@ -70,11 +72,16 @@ function Content({ settings, importBusy, onBusyChange, ...backupProps }: Omit<Pr
     }
   }
 
-  const unchanged = name.trim() === settings.siteName && openInNewTab === settings.openInNewTab && layoutColumns === settings.layoutColumns && autoSortByUsage === settings.autoSortByUsage
+  const unchanged =
+    name.trim() === settings.siteName &&
+    openInNewTab === settings.openInNewTab &&
+    layoutColumns === settings.layoutColumns &&
+    autoSortByUsage === settings.autoSortByUsage &&
+    defaultIntranet === (settings.defaultIntranet !== false)
 
   return (
     <>
-      <div role="tablist" aria-label="设置分类" className="mb-5 flex gap-1 rounded-control border border-line bg-surface-2 p-1">
+      <div role="tablist" aria-label="设置分类" className="mb-5 flex flex-wrap gap-1 rounded-control border border-line bg-surface-2 p-1">
         {([
           { id: 'general', label: '基本设置', icon: Settings },
           { id: 'layout', label: '布局设置', icon: LayoutGrid },
@@ -91,10 +98,10 @@ function Content({ settings, importBusy, onBusyChange, ...backupProps }: Omit<Pr
             aria-selected={tab === id}
             aria-controls={`settings-panel-${id}`}
             disabled={importBusy}
-            className={`flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-control px-2 py-2 text-xs font-medium transition sm:text-sm ${tab === id ? 'bg-surface text-fg shadow-xs' : 'text-muted hover:text-fg'}`}
+            className={`flex min-w-0 flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-control px-2 py-2 text-xs font-medium transition sm:gap-1.5 sm:text-[13px] ${tab === id ? 'bg-surface text-fg shadow-xs' : 'text-muted hover:text-fg'}`}
             onClick={() => setTab(id)}
           >
-            <Icon size={15} className="hidden shrink-0 sm:block" />
+            <Icon size={14} className="hidden shrink-0 sm:block" />
             {label}
           </button>
         ))}
@@ -147,6 +154,21 @@ function Content({ settings, importBusy, onBusyChange, ...backupProps }: Omit<Pr
             通过使用统计自动排序
           </label>
           <p id="auto-sort-by-usage-hint" className="mt-1.5 text-xs text-faint">仅在各分组内按书签及其子链接的总点击次数从多到少排序，次数相同时保留原顺序。关闭后保留当前顺序，停止自动排序。</p>
+          <label className="mt-5 flex cursor-pointer items-center gap-2.5 text-sm">
+            <input
+              type="checkbox"
+              className="size-4 shrink-0 accent-accent-solid"
+              checked={defaultIntranet}
+              disabled={saving}
+              onChange={(event) => {
+                setDefaultIntranet(event.target.checked)
+                setError('')
+              }}
+              aria-describedby="default-intranet-hint"
+            />
+            默认跳转内网
+          </label>
+          <p id="default-intranet-hint" className="mt-1.5 text-xs text-faint">点击配置了内网地址的书签时自动探测内网是否可达，可达则跳转内网，不可达则跳转外网；取消勾选后点击时将弹出内外网选择面板。</p>
           {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
           <div className="mt-5 flex justify-end">
             <button className="btn btn-primary" disabled={saving || !name.trim() || unchanged}>

@@ -131,6 +131,7 @@ const GROUP_LAYOUT_BESIDE_PANEL: Record<LayoutColumns, string> = {
 
 interface Props {
   openInNewTab: boolean
+  defaultIntranet?: boolean
   layoutColumns: LayoutColumns
   /** A side panel is open next to the board */
   besidePanel?: boolean
@@ -147,7 +148,7 @@ interface Props {
   onStartEditing?: () => void
 }
 
-export function BoardView({ desktop, groups, editing, sortable, matchedLinks, collapsedGroupIds, onToggleGroupCollapse, onEditSite, onStartEditing, openInNewTab, layoutColumns, besidePanel }: Props) {
+export function BoardView({ desktop, groups, editing, sortable, matchedLinks, collapsedGroupIds, onToggleGroupCollapse, onEditSite, onStartEditing, openInNewTab, defaultIntranet = true, layoutColumns, besidePanel }: Props) {
   const queryClient = useQueryClient()
   const act = useAct()
   const { toast, confirm } = useUi()
@@ -356,6 +357,7 @@ export function BoardView({ desktop, groups, editing, sortable, matchedLinks, co
           {view.map((group) => (
             <GroupSection
               openInNewTab={openInNewTab}
+              defaultIntranet={defaultIntranet}
               key={group.id}
               group={group}
               view={desktop.view}
@@ -376,7 +378,7 @@ export function BoardView({ desktop, groups, editing, sortable, matchedLinks, co
       </SortableContext>
       {editing && <NewGroup desktopId={desktop.id} />}
       <DragOverlay dropAnimation={{ duration: 200, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' }}>
-        {activeSite && <SiteCard site={activeSite} view={desktop.view} openInNewTab={openInNewTab} editing lifted />}
+        {activeSite && <SiteCard site={activeSite} view={desktop.view} openInNewTab={openInNewTab} defaultIntranet={defaultIntranet} editing lifted />}
       </DragOverlay>
 
       {contextMenu && (
@@ -418,6 +420,7 @@ export function BoardView({ desktop, groups, editing, sortable, matchedLinks, co
 
 function GroupSection({
   openInNewTab,
+  defaultIntranet,
   group,
   view,
   editing,
@@ -580,6 +583,7 @@ function GroupSection({
             {group.sites.map((site, index) => (
               <SortableSite
                 openInNewTab={openInNewTab}
+                defaultIntranet={defaultIntranet}
                 key={site.id}
                 site={site}
                 view={view}
@@ -602,6 +606,7 @@ function GroupSection({
 
 interface SortableSiteProps {
   openInNewTab: boolean
+  defaultIntranet?: boolean
   site: Site
   view: View
   index: number
@@ -614,7 +619,7 @@ interface SortableSiteProps {
   dragJustEndedRef: React.RefObject<boolean>
 }
 
-function SortableSite({ site, view, index, editing, sortable, matchedLinks, onEdit, onDelete, onContextMenu, dragJustEndedRef, openInNewTab }: SortableSiteProps) {
+function SortableSite({ site, view, index, editing, sortable, matchedLinks, onEdit, onDelete, onContextMenu, dragJustEndedRef, openInNewTab, defaultIntranet }: SortableSiteProps) {
   const act = useAct()
   const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({ id: `s-${site.id}`, disabled: !sortable })
 
@@ -637,6 +642,7 @@ function SortableSite({ site, view, index, editing, sortable, matchedLinks, onEd
       <div className="h-full animate-rise" style={{ animationDelay: `${Math.min(index, 12) * 30}ms` }}>
         <SiteCard
           openInNewTab={openInNewTab}
+          defaultIntranet={defaultIntranet}
           site={site}
           view={view}
           editing={editing}

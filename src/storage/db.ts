@@ -23,6 +23,7 @@ export interface DesktopRow extends Entity { name: string; view: View }
 export interface GroupRow extends Entity { desktopId: number; name: string; pinned: boolean }
 export interface SiteRow extends Entity {
   desktopId: number; groupId: number; origin: string; title: string
+  description?: string; intranetUrl?: string
   iconVersion: number; iconUrl: string | null; clicks: number; clickCounts?: ClickCounts; lastClickedAt: number | null
 }
 export interface LinkRow extends Entity { siteId: number; path: string; title: string; clicks: number; clickCounts?: ClickCounts; lastClickedAt: number | null }

@@ -1,7 +1,7 @@
 import { LoaderCircle } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import type { AddResult, Desktop } from '../../shared/types'
-import { fallbackLinkTitle, fullUrl, parseBookmarkUrl, parseIconUrl } from '../../shared/url'
+import { MAX_SITE_DESCRIPTION_LENGTH, type AddResult, type Desktop } from '../../shared/types'
+import { fallbackLinkTitle, fullUrl, parseBookmarkUrl, parseIconUrl, parseIntranetUrl } from '../../shared/url'
 import { api } from '../api'
 import { requestPageTitle, type PageTitleResult } from '../page-title'
 import { Dialog, useAct, useUi } from '../ui'
@@ -21,6 +21,12 @@ interface LinkTitleDraft {
   status: PageTitleResult['status'] | 'loading'
 }
 
+interface SiteTitleDraft {
+  origin: string
+  name: string
+  edited: boolean
+}
+
 /** Adds to `desktop`, the one currently shown */
 export function AddBookmarkDialog({ open, initialUrl = '', onClose, desktop }: { open: boolean; initialUrl?: string; onClose: () => void; desktop: Desktop }) {
   const groups = desktop.groups
@@ -29,7 +35,10 @@ export function AddBookmarkDialog({ open, initialUrl = '', onClose, desktop }: {
   const [url, setUrl] = useState('')
   const [groupId, setGroupId] = useState<number | undefined>()
   const [busy, setBusy] = useState(false)
+  const [siteTitleDraft, setSiteTitleDraft] = useState<SiteTitleDraft | null>(null)
   const [titleDraft, setTitleDraft] = useState<LinkTitleDraft | null>(null)
+  const [description, setDescription] = useState('')
+  const [intranetUrl, setIntranetUrl] = useState('')
   const titleRequest = useRef(0)
   /** null while the optional icon field is folded away */
   const [iconUrl, setIconUrl] = useState<string | null>(null)
@@ -37,11 +46,16 @@ export function AddBookmarkDialog({ open, initialUrl = '', onClose, desktop }: {
   useEffect(() => {
     if (!open) return
     setUrl(initialUrl)
+    setSiteTitleDraft(null)
+    setDescription('')
+    setIntranetUrl('')
     setIconUrl(null)
   }, [open, initialUrl])
 
   const parsed = useMemo(() => parseBookmarkUrl(url), [url])
   const existing = useMemo(() => (parsed ? groups.flatMap((g) => g.sites).find((s) => s.origin === parsed.origin) : undefined), [parsed, groups])
+  const defaultSiteTitle = parsed ? parsed.host.slice(0, 80) : ''
+  const siteTitle = siteTitleDraft && (siteTitleDraft.origin === (parsed?.origin ?? '') || siteTitleDraft.edited) ? siteTitleDraft.name : defaultSiteTitle
   const titleUrl = parsed?.path && !existing?.links.some((link) => link.path === parsed.path) ? fullUrl(parsed.origin, parsed.path) : null
   const defaultTitle = parsed?.path ? fallbackLinkTitle(parsed.path).slice(0, 80) : ''
   const currentTitle = titleDraft?.url === titleUrl ? titleDraft : null
@@ -49,6 +63,8 @@ export function AddBookmarkDialog({ open, initialUrl = '', onClose, desktop }: {
   const selectedGroup = groups.find((g) => g.id === groupId)?.id ?? groups[0]?.id
   const customIcon = iconUrl?.trim() ? parseIconUrl(iconUrl) : null
   const iconInvalid = !!iconUrl?.trim() && !customIcon
+  const parsedIntranet = intranetUrl.trim() ? parseIntranetUrl(intranetUrl) : null
+  const intranetInvalid = !!intranetUrl.trim() && !parsedIntranet
 
   const readTitle = useCallback(async (target: string, requestPermission: boolean, version: number) => {
     if (titleRequest.current !== version) return
@@ -77,12 +93,17 @@ export function AddBookmarkDialog({ open, initialUrl = '', onClose, desktop }: {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
-    if (!parsed || busy || iconInvalid) return
+    if (!parsed || busy || iconInvalid || intranetInvalid) return
     titleRequest.current++
     setBusy(true)
     const ok = await act(async () => {
-      const title = titleUrl ? linkTitle.trim() || defaultTitle : undefined
-      const result = await api.addBookmark(url, desktop.id, selectedGroup, title)
+      const resolvedSiteTitle = siteTitle.trim() || defaultSiteTitle
+      const title = titleUrl ? linkTitle.trim() || defaultTitle : resolvedSiteTitle
+      const result = await api.addBookmark(url, desktop.id, selectedGroup, title, {
+        siteTitle: resolvedSiteTitle,
+        description: description.trim() || undefined,
+        intranetUrl: parsedIntranet ?? undefined,
+      })
       toast(RESULT_MESSAGE[result.result](result.siteTitle))
       // A custom icon only applies to a card created just now, never to one that was already there
       if (customIcon && result.result === 'site_created') await api.setIcon(result.siteId, { url: customIcon })
@@ -136,6 +157,21 @@ export function AddBookmarkDialog({ open, initialUrl = '', onClose, desktop }: {
           )}
         </div>
 
+        {!existing && (
+          <div className="mt-4">
+            <label className="label" htmlFor="bookmark-site-title">主链接名称</label>
+            <input
+              id="bookmark-site-title"
+              className="input"
+              maxLength={80}
+              placeholder={defaultSiteTitle || '留空则默认使用域名'}
+              value={siteTitle}
+              disabled={busy}
+              onChange={(event) => setSiteTitleDraft({ origin: parsed?.origin ?? '', name: event.target.value, edited: true })}
+            />
+          </div>
+        )}
+
         {titleUrl && (
           <div className="mt-4">
             <label className="label" htmlFor="bookmark-link-title">子链接名称</label>
@@ -167,6 +203,39 @@ export function AddBookmarkDialog({ open, initialUrl = '', onClose, desktop }: {
               )}
             </div>
           </div>
+        )}
+
+        {!existing && (
+          <>
+            <div className="mt-4">
+              <label className="label" htmlFor="bookmark-intranet-url">内网地址（可选）</label>
+              <input
+                id="bookmark-intranet-url"
+                className={`input ${intranetInvalid ? '!border-danger/60' : ''}`}
+                maxLength={2000}
+                placeholder="例如 http://192.168.1.100:8080"
+                autoComplete="off"
+                spellCheck={false}
+                value={intranetUrl}
+                disabled={busy}
+                onChange={(event) => setIntranetUrl(event.target.value)}
+              />
+              {intranetInvalid && <p className="mt-1.5 text-xs text-danger">请输入有效的内网 HTTP(S) 地址</p>}
+            </div>
+
+            <div className="mt-4">
+              <label className="label" htmlFor="bookmark-description">描述（可选）</label>
+              <input
+                id="bookmark-description"
+                className="input"
+                maxLength={MAX_SITE_DESCRIPTION_LENGTH}
+                placeholder="添加简短描述"
+                value={description}
+                disabled={busy}
+                onChange={(event) => setDescription(event.target.value)}
+              />
+            </div>
+          </>
         )}
 
         {groups.length > 0 && !existing && (
@@ -221,7 +290,7 @@ export function AddBookmarkDialog({ open, initialUrl = '', onClose, desktop }: {
           <button type="button" className="btn btn-soft" disabled={busy} onClick={onClose}>
             取消
           </button>
-          <button className="btn btn-primary" disabled={!parsed || busy || iconInvalid}>
+          <button className="btn btn-primary" disabled={!parsed || busy || iconInvalid || intranetInvalid}>
             {busy && <LoaderCircle size={15} className="animate-spin" />}
             添加
           </button>

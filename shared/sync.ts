@@ -1,7 +1,7 @@
 import { clickCountsOf, mergeClickCounts, parseClickCounts, totalClicks, type ClickCounts } from './counters'
 import { isLayoutColumns, MAX_SITE_NAME_LENGTH, DEFAULT_SETTINGS, type SystemSettings } from './settings'
-import { isView, MAX_TODO_LENGTH, type View } from './types'
-import { parseBookmarkUrl } from './url'
+import { isView, MAX_SITE_DESCRIPTION_LENGTH, MAX_TODO_LENGTH, type View } from './types'
+import { parseBookmarkUrl, parseIntranetUrl } from './url'
 
 /**
  * A sync snapshot is a flattened copy of the local database: every row carries its
@@ -50,6 +50,8 @@ export interface SyncSite extends SyncRow {
   groupSyncId: string
   origin: string
   title: string
+  description?: string
+  intranetUrl?: string
   /** Address of a custom icon; the image itself stays on this device */
   iconUrl: string | null
   clicks: number
@@ -171,6 +173,7 @@ export function parseSnapshot(input: unknown): SyncSnapshot | null {
   const siteName = text(settings.siteName, MAX_SITE_NAME_LENGTH)
   if (!siteName || typeof settings.openInNewTab !== 'boolean' || !isLayoutColumns(settings.layoutColumns)) return null
   if (settings.autoSortByUsage !== undefined && typeof settings.autoSortByUsage !== 'boolean') return null
+  if (settings.defaultIntranet !== undefined && typeof settings.defaultIntranet !== 'boolean') return null
   if (typeof input.since !== 'number' || !Number.isSafeInteger(input.since) || input.since < 0) return null
 
   const desktops: SyncDesktop[] = []
@@ -212,8 +215,12 @@ export function parseSnapshot(input: unknown): SyncSnapshot | null {
     if (seenOrigins.has(key)) continue
     seenOrigins.add(key)
     siteIds.add(base.syncId)
+    const description = text(item.description, MAX_SITE_DESCRIPTION_LENGTH)
+    const intranetUrl = typeof item.intranetUrl === 'string' ? parseIntranetUrl(item.intranetUrl) : null
     sites.push({
       ...base, groupSyncId: group, origin: parsed.origin, title,
+      ...(description ? { description } : {}),
+      ...(intranetUrl ? { intranetUrl } : {}),
       iconUrl: typeof item.iconUrl === 'string' && item.iconUrl.length <= 2000 ? item.iconUrl : null,
       clicks: count(item.clicks), clickCounts: parseClickCounts(item.clickCounts) ?? clickCountsOf({ clicks: count(item.clicks) }), lastClickedAt: moment(item.lastClickedAt),
     })
@@ -252,7 +259,7 @@ export function parseSnapshot(input: unknown): SyncSnapshot | null {
     updatedAt: stamp(input.updatedAt),
     since: input.since,
     settings: {
-      value: { siteName, openInNewTab: settings.openInNewTab, layoutColumns: settings.layoutColumns, autoSortByUsage: settings.autoSortByUsage === true },
+      value: { siteName, openInNewTab: settings.openInNewTab, layoutColumns: settings.layoutColumns, autoSortByUsage: settings.autoSortByUsage === true, defaultIntranet: settings.defaultIntranet !== false },
       updatedAt: stamp(input.settings.updatedAt),
     },
     desktops, groups, sites, links, todos,
@@ -340,6 +347,11 @@ function mergeCounters(ancestor: Counted | undefined, local: Counted, remote: Co
   }
 }
 
+function setField<T extends SyncRow, K extends keyof T>(row: T, key: K, value: T[K]) {
+  if (value === undefined) delete row[key]
+  else row[key] = value
+}
+
 /**
  * Merges a row present in all three versions: a field only one side changed is taken from
  * that side, so a rename here and a reorder there both survive. A field both sides changed
@@ -349,17 +361,18 @@ function mergeRow<T extends SyncRow>(ancestor: T, local: T, remote: T): { row: T
   const winner = newest(local, remote)
   const row = { ...winner } as T
   let conflict = false
-  for (const key of Object.keys(winner) as (keyof T)[]) {
+  const keys = new Set([...Object.keys(ancestor), ...Object.keys(local), ...Object.keys(remote)]) as Set<keyof T>
+  for (const key of keys) {
     if (key === 'syncId' || key === 'createdAt' || key === 'updatedAt') continue
     const here = local[key]
     const there = remote[key]
     if (same(here, there)) continue
     if (!COUNTERS.has(key as string)) {
-      if (same(here, ancestor[key])) { row[key] = there; continue }
-      if (same(there, ancestor[key])) { row[key] = here; continue }
+      if (same(here, ancestor[key])) { setField(row, key, there); continue }
+      if (same(there, ancestor[key])) { setField(row, key, here); continue }
       conflict = true
     }
-    row[key] = winner[key]
+    setField(row, key, winner[key])
   }
   row.createdAt = Math.min(local.createdAt, remote.createdAt, ancestor.createdAt)
   row.updatedAt = Math.max(local.updatedAt, remote.updatedAt, ancestor.updatedAt)
@@ -372,10 +385,11 @@ function mergeNew<T extends SyncRow>(local: T, remote: T, firstSync: boolean): {
   const winner = newest(local, remote)
   const row = { ...winner } as T
   let conflict = false
-  for (const key of Object.keys(winner) as (keyof T)[]) {
+  const keys = new Set([...Object.keys(local), ...Object.keys(remote)]) as Set<keyof T>
+  for (const key of keys) {
     if (same(local[key], remote[key])) continue
     conflict = true
-    row[key] = winner[key]
+    setField(row, key, winner[key])
   }
   row.createdAt = Math.min(local.createdAt, remote.createdAt)
   row.updatedAt = winner.updatedAt

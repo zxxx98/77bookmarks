@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { fallbackLinkTitle, fullUrl, hostOf, parseBookmarkUrl, parseIconUrl } from './url'
+import { fallbackLinkTitle, fullIntranetUrl, fullUrl, hostOf, parseBookmarkUrl, parseIconUrl, parseIntranetUrl } from './url'
 
 describe('parseBookmarkUrl', () => {
   it('adds https when the scheme is missing', () => {
@@ -93,5 +93,14 @@ describe('helpers', () => {
     expect(fallbackLinkTitle('/anthropics/claude-code')).toBe('claude-code')
     expect(fallbackLinkTitle('/docs/%E4%B8%AD%E6%96%87/?a=1')).toBe('中文')
     expect(fallbackLinkTitle('/?q=1')).toBe('/?q=1')
+  })
+
+  it('parseIntranetUrl normalizes intranet addresses and fullIntranetUrl joins subpaths', () => {
+    expect(parseIntranetUrl('192.168.1.100:8080')).toBe('http://192.168.1.100:8080')
+    expect(parseIntranetUrl('http://nas:5000/')).toBe('http://nas:5000')
+    expect(parseIntranetUrl('https://intranet.corp.local/app')).toBe('https://intranet.corp.local/app')
+    expect(parseIntranetUrl('not a url')).toBeNull()
+    expect(fullIntranetUrl('http://192.168.1.100:8080', '/docs')).toBe('http://192.168.1.100:8080/docs')
+    expect(fullIntranetUrl('http://192.168.1.100:8080', null)).toBe('http://192.168.1.100:8080')
   })
 })

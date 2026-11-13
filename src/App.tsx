@@ -136,9 +136,9 @@ interface HomeProps {
 }
 
 function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBoard, settingsReady, settingsError, onRetrySettings, settings }: HomeProps) {
-  const { siteName, openInNewTab, layoutColumns } = settings
+  const { siteName, openInNewTab, layoutColumns, defaultIntranet = true } = settings
   const queryClient = useQueryClient()
-  const { toast } = useUi()
+  const { toast, openBookmark } = useUi()
   const [engine] = useSearchEngine()
   const [query, setQuery] = useState('')
   const [editing, setEditing] = useState(false)
@@ -363,12 +363,22 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
   const handleSearchBookmark = useCallback(() => {
     if (!result.firstUrl) return
     if (result.firstTarget) recordClick(result.firstTarget)
+    if (result.firstIntranetUrl) {
+      openBookmark({
+        title: result.firstTitle ?? result.firstUrl,
+        extranetUrl: result.firstUrl,
+        intranetUrl: result.firstIntranetUrl,
+        openInNewTab,
+        defaultIntranet: defaultIntranet !== false,
+      })
+      return
+    }
     if (openInNewTab) {
       window.open(result.firstUrl, '_blank', 'noreferrer')
     } else {
       window.location.assign(result.firstUrl)
     }
-  }, [result.firstUrl, result.firstTarget, openInNewTab])
+  }, [result.firstUrl, result.firstIntranetUrl, result.firstTitle, result.firstTarget, openInNewTab, defaultIntranet, openBookmark])
 
   return (
     <>
@@ -464,6 +474,7 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
           ) : (
             <BoardView
               openInNewTab={openInNewTab}
+              defaultIntranet={defaultIntranet !== false}
               layoutColumns={layoutColumns}
               besidePanel={todoOpen}
               desktop={desktop}

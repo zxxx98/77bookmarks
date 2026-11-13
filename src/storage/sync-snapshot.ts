@@ -47,6 +47,8 @@ export function snapshotOf(rows: LocalRows, deviceId: string): SyncSnapshot {
       .filter((row) => groupSync.has(row.groupId))
       .map((row) => ({
         ...meta(row), groupSyncId: groupSync.get(row.groupId)!, origin: row.origin, title: row.title,
+        ...(row.description ? { description: row.description } : {}),
+        ...(row.intranetUrl ? { intranetUrl: row.intranetUrl } : {}),
         iconUrl: row.iconUrl, clicks: row.clicks, clickCounts: clickCountsOf(row), lastClickedAt: row.lastClickedAt,
       })),
     links: sorted(rows.links)

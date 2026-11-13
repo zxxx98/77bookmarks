@@ -108,9 +108,10 @@ describe('desktops, groups, sorting and cascading deletion', () => {
 describe('automatic usage sorting', () => {
   it('defaults to off for both new and existing installations', async () => {
     expect((await service.settings()).autoSortByUsage).toBe(false)
+    expect((await service.settings()).defaultIntranet).toBe(true)
     const legacy = { siteName: '旧设置', openInNewTab: false, layoutColumns: 2 as const }
     await db.put('settings', { key: 'system', value: legacy as typeof DEFAULT_SETTINGS })
-    expect(await service.settings()).toEqual({ ...legacy, autoSortByUsage: false })
+    expect(await service.settings()).toEqual({ ...legacy, autoSortByUsage: false, defaultIntranet: true })
   })
 
   it('sorts by combined homepage and link clicks within each group without moving groups or desktops', async () => {
@@ -166,14 +167,42 @@ describe('automatic usage sorting', () => {
   })
 
   it('preserves the setting in full backups and defaults older backups to off', async () => {
-    await service.updateSettings({ ...DEFAULT_SETTINGS, autoSortByUsage: true })
+    await service.updateSettings({ ...DEFAULT_SETTINGS, autoSortByUsage: true, defaultIntranet: false })
     const backup = JSON.parse((await service.exportBackup()).json)
     await service.updateSettings(DEFAULT_SETTINGS)
     await service.importBackup(backup, 'replace')
     expect((await service.settings()).autoSortByUsage).toBe(true)
+    expect((await service.settings()).defaultIntranet).toBe(false)
     delete backup.local.settings.autoSortByUsage
+    delete backup.local.settings.defaultIntranet
     await service.importBackup(backup, 'replace')
     expect((await service.settings()).autoSortByUsage).toBe(false)
+    expect((await service.settings()).defaultIntranet).toBe(true)
+  })
+
+  it('supports bookmark description, intranetUrl, and main link title on creation and update', async () => {
+    const added = await service.addBookmark('https://public.example.com/docs', 0, undefined, '开发文档', undefined, {
+      siteTitle: '公司主站',
+      description: '内部与外部统一入口',
+      intranetUrl: '192.168.1.100:8080',
+    })
+    expect(added.siteTitle).toBe('公司主站')
+    const site = (await boardSites())[0]
+    expect(site).toMatchObject({
+      title: '公司主站',
+      description: '内部与外部统一入口',
+      intranetUrl: 'http://192.168.1.100:8080',
+      links: [{ path: '/docs', title: '开发文档' }],
+    })
+    await service.updateSite(site.id, { description: '更新后的描述', intranetUrl: 'https://intranet.local:8443/app' })
+    expect((await boardSites())[0]).toMatchObject({
+      description: '更新后的描述',
+      intranetUrl: 'https://intranet.local:8443/app',
+    })
+    await service.updateSite(site.id, { description: '  ', intranetUrl: '' })
+    const cleared = (await boardSites())[0]
+    expect(cleared.description).toBeUndefined()
+    expect(cleared.intranetUrl).toBeUndefined()
   })
 })
 

@@ -10,6 +10,7 @@ export interface SystemSettings {
   openInNewTab: boolean
   layoutColumns: LayoutColumns
   autoSortByUsage: boolean
+  defaultIntranet?: boolean
 }
 
 export const DEFAULT_SETTINGS: SystemSettings = {
@@ -17,4 +18,5 @@ export const DEFAULT_SETTINGS: SystemSettings = {
   openInNewTab: true,
   layoutColumns: 1,
   autoSortByUsage: false,
+  defaultIntranet: true,
 }

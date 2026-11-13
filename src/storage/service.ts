@@ -2,8 +2,8 @@ import { clickCountsOf, totalClicks, type ClickCounts } from '../../shared/count
 import { backupStats, parseBackup, type BackupDesktop, type BackupSite } from '../../shared/backup'
 import { DEFAULT_SETTINGS, isLayoutColumns, MAX_SITE_NAME_LENGTH, type SystemSettings } from '../../shared/settings'
 import { DEFAULT_DESKTOP_SYNC_ID, DEFAULT_GROUP_SYNC_ID, mergeSnapshots, snapshotFingerprint, type MergeStats, type SyncSnapshot } from '../../shared/sync'
-import { MAX_TODO_LENGTH, isView, type AddResult, type BoardPage, type ClickTarget, type Desktop, type ImportMode, type ImportResult, type OrderInput, type UsageStats, type View } from '../../shared/types'
-import { fallbackLinkTitle, hostOf, parseBookmarkUrl, parseIconUrl } from '../../shared/url'
+import { MAX_SITE_DESCRIPTION_LENGTH, MAX_TODO_LENGTH, isView, type AddResult, type BoardPage, type ClickTarget, type Desktop, type ImportMode, type ImportResult, type OrderInput, type UsageStats, type View } from '../../shared/types'
+import { fallbackLinkTitle, hostOf, parseBookmarkUrl, parseIconUrl, parseIntranetUrl } from '../../shared/url'
 import { EMPTY_SYNC_CONFIG, EMPTY_SYNC_STATE, isSyncKind, type SyncConfig, type SyncState, type SyncStatus } from '../sync/types'
 import { changed, entity, openLocalDatabase, sorted, STORES, SYNC_STORE, type DesktopRow, type Entity, type GroupRow, type LinkRow, type LocalDatabase, type SettingsRow, type SiteRow, type SyncTransaction, type TodoRow, type WriteTransaction } from './db'
 import { applySnapshot, buildSnapshot, snapshotOf } from './sync-snapshot'
@@ -152,7 +152,10 @@ export class LocalService {
     await tx.done
     const desktop: Desktop = { id: selected.id, name: selected.name, view: selected.view, groups: sorted(groups).sort((a, b) => Number(b.pinned) - Number(a.pinned)).map((g) => ({
       id: g.id, name: g.name, pinned: g.pinned, sites: sorted(sites.filter((s) => s.groupId === g.id)).map((s) => ({
-        id: s.id, origin: s.origin, title: s.title, iconVersion: s.iconVersion, iconUrl: s.iconUrl,
+        id: s.id, origin: s.origin, title: s.title,
+        ...(s.description ? { description: s.description } : {}),
+        ...(s.intranetUrl ? { intranetUrl: s.intranetUrl } : {}),
+        iconVersion: s.iconVersion, iconUrl: s.iconUrl,
         links: (links.get(s.id) ?? []).map((l) => ({ id: l.id, path: l.path, title: l.title })),
       })),
     })) }
@@ -165,16 +168,28 @@ export class LocalService {
     const hit = (s: string) => s.toLowerCase().includes(q)
     const links = new Set(rows.links.filter((l) => hit(l.path) || hit(l.title)).map((l) => l.siteId))
     const counts = new Map<number, number>()
-    for (const s of rows.sites) if (hit(s.title) || hit(hostOf(s.origin)) || links.has(s.id)) counts.set(s.desktopId, (counts.get(s.desktopId) ?? 0) + 1)
+    for (const s of rows.sites) if (hit(s.title) || hit(hostOf(s.origin)) || (s.description && hit(s.description)) || (s.intranetUrl && hit(s.intranetUrl)) || links.has(s.id)) counts.set(s.desktopId, (counts.get(s.desktopId) ?? 0) + 1)
     return [...counts].map(([desktopId, count]) => ({ desktopId, count }))
   }
   async settings(): Promise<SystemSettings> {
-    return { ...DEFAULT_SETTINGS, ...((await (await this.db()).get('settings', 'system'))?.value as SystemSettings | undefined) }
+    const stored = (await (await this.db()).get('settings', 'system'))?.value as SystemSettings | undefined
+    return { ...DEFAULT_SETTINGS, ...stored, defaultIntranet: stored?.defaultIntranet !== false }
   }
-  async updateSettings(settings: Omit<SystemSettings, 'autoSortByUsage'> & { autoSortByUsage?: boolean }) {
+  async updateSettings(settings: Omit<SystemSettings, 'autoSortByUsage' | 'defaultIntranet'> & { autoSortByUsage?: boolean; defaultIntranet?: boolean }) {
     const siteName = nameOf(settings.siteName, MAX_SITE_NAME_LENGTH)
-    if (typeof settings.openInNewTab !== 'boolean' || !isLayoutColumns(settings.layoutColumns) || (settings.autoSortByUsage !== undefined && typeof settings.autoSortByUsage !== 'boolean')) throw new Error('无效的设置')
-    const value = { siteName, openInNewTab: settings.openInNewTab, layoutColumns: settings.layoutColumns, autoSortByUsage: settings.autoSortByUsage ?? false }
+    if (
+      typeof settings.openInNewTab !== 'boolean' ||
+      !isLayoutColumns(settings.layoutColumns) ||
+      (settings.autoSortByUsage !== undefined && typeof settings.autoSortByUsage !== 'boolean') ||
+      (settings.defaultIntranet !== undefined && typeof settings.defaultIntranet !== 'boolean')
+    ) throw new Error('无效的设置')
+    const value: SystemSettings = {
+      siteName,
+      openInNewTab: settings.openInNewTab,
+      layoutColumns: settings.layoutColumns,
+      autoSortByUsage: settings.autoSortByUsage ?? false,
+      defaultIntranet: settings.defaultIntranet ?? true,
+    }
     await this.write(async (tx) => {
       // Settings carry their own modification time so that the newer side wins when syncing
       const previous = await tx.objectStore('settings').get('system')
@@ -251,10 +266,21 @@ export class LocalService {
     const rows = await tx.objectStore(store).getAll()
     return rows.reduce((max, row) => Math.max(max, row.position + 1), 0)
   }
-  async addBookmark(url: string, desktopId = 0, groupId?: number, title?: string, iconDataUrl?: string): Promise<AddResult> {
+  async addBookmark(
+    url: string,
+    desktopId = 0,
+    groupId?: number,
+    title?: string,
+    iconDataUrl?: string,
+    extra?: { siteTitle?: string; description?: string; intranetUrl?: string },
+  ): Promise<AddResult> {
     const parsed = parseBookmarkUrl(url)
     if (!parsed) throw new Error('无效的网址')
     const icon = iconDataUrl ? validateIcon(iconDataUrl) : null
+    const description = extra?.description?.trim() ? extra.description.trim().slice(0, MAX_SITE_DESCRIPTION_LENGTH) : undefined
+    const rawIntranet = extra?.intranetUrl?.trim() ?? ''
+    const intranetUrl = rawIntranet ? parseIntranetUrl(rawIntranet) : undefined
+    if (rawIntranet && !intranetUrl) throw new Error('无效的内网地址')
     // Card and link identities come from their natural keys (desktop + origin, card + path),
     // so the same bookmark added on another device while offline becomes the same record
     // instead of a second one. Both are computed before the transaction: WebCrypto cannot
@@ -273,7 +299,20 @@ export class LocalService {
       if (!site) {
         const requested = groupId ? await tx.objectStore('groups').get(groupId) : undefined
         const target = requested?.desktopId === desktop.id ? requested.id : await this.firstGroup(tx, desktop.id)
-        const row = { ...entity(await this.next(tx, 'sites')), syncId: siteSyncId, ...stats(), desktopId: desktop.id, groupId: target, origin: parsed.origin, title: (title && !parsed.path ? title.trim() : hostOf(parsed.origin)).slice(0, 80), iconVersion: icon ? Date.now() : 0, iconUrl: null } as SiteRow
+        const resolvedSiteTitle = (extra?.siteTitle?.trim() || (title && !parsed.path ? title.trim() : '') || hostOf(parsed.origin)).slice(0, 80)
+        const row = {
+          ...entity(await this.next(tx, 'sites')),
+          syncId: siteSyncId,
+          ...stats(),
+          desktopId: desktop.id,
+          groupId: target,
+          origin: parsed.origin,
+          title: resolvedSiteTitle,
+          ...(description ? { description } : {}),
+          ...(intranetUrl ? { intranetUrl } : {}),
+          iconVersion: icon ? Date.now() : 0,
+          iconUrl: null,
+        } as SiteRow
         const id = await tx.objectStore('sites').add(row)
         site = { ...row, id }
         if (icon) await tx.objectStore('icons').put({ siteId: id, dataUrl: icon })
@@ -282,10 +321,27 @@ export class LocalService {
       return { result: parsed.path ? (existed ? 'link_added' : 'site_created') : 'site_created', siteId: site.id, siteTitle: site.title }
     })
   }
-  async updateSite(id: number, patch: { title?: string; groupId?: number; desktopId?: number }) {
+  async updateSite(id: number, patch: { title?: string; description?: string; intranetUrl?: string | null; groupId?: number; desktopId?: number }) {
     return this.write(async (tx) => {
       const site = requireRow(await tx.objectStore('sites').get(id), '卡片')
       if (patch.title !== undefined) site.title = nameOf(patch.title, 80)
+      if (patch.description !== undefined) {
+        if (typeof patch.description !== 'string') throw new Error('无效的描述')
+        const desc = patch.description.trim().slice(0, MAX_SITE_DESCRIPTION_LENGTH)
+        if (desc) site.description = desc
+        else delete site.description
+      }
+      if (patch.intranetUrl !== undefined) {
+        if (patch.intranetUrl !== null && typeof patch.intranetUrl !== 'string') throw new Error('无效的内网地址')
+        const raw = (patch.intranetUrl ?? '').trim()
+        if (!raw) {
+          delete site.intranetUrl
+        } else {
+          const parsedIntranet = parseIntranetUrl(raw)
+          if (!parsedIntranet) throw new Error('无效的内网地址')
+          site.intranetUrl = parsedIntranet
+        }
+      }
       if (patch.groupId !== undefined || patch.desktopId !== undefined) {
         const groupId = patch.groupId ?? await this.firstGroup(tx, patch.desktopId!)
         const group = requireRow(await tx.objectStore('groups').get(groupId), '分组')
@@ -445,7 +501,7 @@ export class LocalService {
       desktops: sorted(desktops).filter((d) => desktopId === undefined || d.id === desktopId).map((d) => ({ name: d.name, view: d.view, ...metadata(d), groups: sorted(groups).filter((g) => g.desktopId === d.id).map((g) => ({ name: g.name, pinned: g.pinned, ...metadata(g), sites: sorted(sites).filter((s) => s.groupId === g.id).map((s) => {
         const dataUrl = iconMap.get(s.id)
         const match = dataUrl && /^data:([^;]+);base64,(.*)$/.exec(dataUrl)
-        return { origin: s.origin, title: s.title, ...metadata(s), ...(s.iconUrl ? { iconUrl: s.iconUrl } : {}), ...(match ? { icon: { type: match[1], data: match[2] } } : {}), links: sorted(links).filter((l) => l.siteId === s.id).map((l) => ({ path: l.path, title: l.title, ...metadata(l) })) }
+        return { origin: s.origin, title: s.title, ...(s.description ? { description: s.description } : {}), ...(s.intranetUrl ? { intranetUrl: s.intranetUrl } : {}), ...metadata(s), ...(s.iconUrl ? { iconUrl: s.iconUrl } : {}), ...(match ? { icon: { type: match[1], data: match[2] } } : {}), links: sorted(links).filter((l) => l.siteId === s.id).map((l) => ({ path: l.path, title: l.title, ...metadata(l) })) }
       }) })) })),
       ...(full ? { local: { settings: { ...DEFAULT_SETTINGS, ...(settings.find((s) => s.key === 'system')?.value as SystemSettings | undefined) }, since: settings.find((s) => s.key === 'since')?.value ?? Date.now(), todos: sorted(todos).map((t) => ({ text: t.text, doneAt: t.doneAt, ...metadata(t) })) } } : {}),
     }
@@ -484,7 +540,7 @@ export class LocalService {
     return mode === 'replace' ? { ...base, syncId: source.syncId ?? base.syncId, createdAt: source.createdAt ?? base.createdAt, updatedAt: source.updatedAt ?? base.updatedAt } : base
   }
   private async importSite(tx: WriteTransaction, desktopId: number, groupId: number, s: BackupSite, position: number, mode: ImportMode) {
-    const siteId = await tx.objectStore('sites').add({ ...this.importEntity(s, mode), ...stats(), clicks: s.clicks ?? 0, ...(s.clickCounts ? { clickCounts: s.clickCounts } : {}), lastClickedAt: s.lastClickedAt ?? null, position, desktopId, groupId, origin: s.origin, title: s.title, iconUrl: s.iconUrl ?? null, iconVersion: s.icon ? Date.now() : 0 } as SiteRow)
+    const siteId = await tx.objectStore('sites').add({ ...this.importEntity(s, mode), ...stats(), clicks: s.clicks ?? 0, ...(s.clickCounts ? { clickCounts: s.clickCounts } : {}), lastClickedAt: s.lastClickedAt ?? null, position, desktopId, groupId, origin: s.origin, title: s.title, ...(s.description ? { description: s.description } : {}), ...(s.intranetUrl ? { intranetUrl: s.intranetUrl } : {}), iconUrl: s.iconUrl ?? null, iconVersion: s.icon ? Date.now() : 0 } as SiteRow)
     if (s.icon) await tx.objectStore('icons').put({ siteId, dataUrl: `data:${s.icon.type};base64,${s.icon.data}` })
     for (const [linkPosition, l] of s.links.entries()) await tx.objectStore('links').add({ ...this.importEntity(l, mode), ...stats(), clicks: l.clicks ?? 0, ...(l.clickCounts ? { clickCounts: l.clickCounts } : {}), lastClickedAt: l.lastClickedAt ?? null, position: linkPosition, siteId, path: l.path, title: l.title } as LinkRow)
   }

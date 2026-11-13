@@ -1,15 +1,16 @@
 import { ChevronDown, GripVertical, Pencil, Trash2, X } from 'lucide-react'
-import { useState, type HTMLAttributes } from 'react'
-import type { Link, Site, View } from '../../shared/types'
-import { fullUrl, hostOf } from '../../shared/url'
+import { useState, type HTMLAttributes, type MouseEvent } from 'react'
+import type { ClickTarget, Link, Site, View } from '../../shared/types'
+import { fullIntranetUrl, fullUrl, hostOf } from '../../shared/url'
 import { countClicks, recordClick } from '../clicks'
-import { usePopover } from '../ui'
+import { usePopover, useUi } from '../ui'
 import { SiteIcon } from './SiteIcon'
 
 const COLLAPSED_LINKS = 6
 
 interface Props {
   openInNewTab: boolean
+  defaultIntranet?: boolean
   site: Site
   view?: View
   editing?: boolean
@@ -31,11 +32,30 @@ export function SiteCard(props: Props) {
 
 const focusRing = 'outline-none focus-visible:ring-2 focus-visible:ring-accent/50'
 
-function LargeCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, onDelete, onDeleteLink, openInNewTab }: Props) {
+function isPlainClick(event: MouseEvent) {
+  return event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey
+}
+
+function LargeCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, onDelete, onDeleteLink, openInNewTab, defaultIntranet = true }: Props) {
+  const { openBookmark } = useUi()
   const [expanded, setExpanded] = useState(false)
   const searching = !!matchedLinks && matchedLinks.size > 0
   const showAll = expanded || editing || searching || site.links.length <= COLLAPSED_LINKS
   const links = showAll ? site.links : site.links.slice(0, COLLAPSED_LINKS - 1)
+
+  const handleCardClick = (event: MouseEvent) => {
+    recordClick({ siteId: site.id })
+    if (site.intranetUrl && isPlainClick(event)) {
+      event.preventDefault()
+      openBookmark({
+        title: site.title,
+        extranetUrl: site.origin,
+        intranetUrl: site.intranetUrl,
+        openInNewTab,
+        defaultIntranet,
+      })
+    }
+  }
 
   return (
     <div className={`group/card relative h-full select-none overflow-hidden [-webkit-touch-callout:none] ${lifted ? 'card-lifted scale-[1.02]' : 'card-surface'}`}>
@@ -44,20 +64,31 @@ function LargeCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
         target={openInNewTab ? '_blank' : '_self'}
         rel="noreferrer"
         draggable={false}
-        {...countClicks({ siteId: site.id })}
+        onClick={handleCardClick}
+        onAuxClick={(event) => { if (event.button === 1) recordClick({ siteId: site.id }) }}
         className={`flex min-w-0 max-w-full items-center gap-3 rounded-card p-4 ${focusRing} ${editing ? 'pr-26' : ''} ${site.links.length ? 'pb-3' : ''}`}
       >
         <SiteIcon site={site} />
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[15px] leading-5 font-semibold" title={site.title}>{site.title}</span>
+          <span className="flex items-center gap-1.5">
+            <span className="truncate text-[15px] leading-5 font-semibold" title={site.title}>{site.title}</span>
+            {site.intranetUrl && (
+              <span className="shrink-0 rounded-pill bg-accent-soft px-1.5 py-0.5 text-[10px] leading-none font-medium text-accent" title={`内网地址：${site.intranetUrl}`}>
+                内网
+              </span>
+            )}
+          </span>
           <span className="block truncate font-mono text-[11px] leading-5 text-muted" title={hostOf(site.origin)}>{hostOf(site.origin)}</span>
+          {site.description && (
+            <span className="mt-0.5 block truncate text-xs leading-4 text-muted" title={site.description}>{site.description}</span>
+          )}
         </span>
       </a>
 
       {site.links.length > 0 && (
         <div className="flex flex-wrap gap-1.5 px-4 pb-4">
           {links.map((link) => (
-            <LinkChip openInNewTab={openInNewTab} key={link.id} site={site} link={link} matched={matchedLinks?.has(link.id)} editing={editing} onDelete={onDeleteLink} />
+            <LinkChip openInNewTab={openInNewTab} defaultIntranet={defaultIntranet} key={link.id} site={site} link={link} matched={matchedLinks?.has(link.id)} editing={editing} onDelete={onDeleteLink} />
           ))}
           {!showAll && (
             <button
@@ -76,9 +107,24 @@ function LargeCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
 }
 
 /** Icon and title only. Links open from the count badge, and the ones matching a search are shown inline */
-function SmallCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, onDelete, onDeleteLink, openInNewTab }: Props) {
+function SmallCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, onDelete, onDeleteLink, openInNewTab, defaultIntranet = true }: Props) {
+  const { openBookmark } = useUi()
   const menu = usePopover<HTMLDivElement>()
   const matched = site.links.filter((link) => matchedLinks?.has(link.id))
+
+  const handleCardClick = (event: MouseEvent) => {
+    recordClick({ siteId: site.id })
+    if (site.intranetUrl && isPlainClick(event)) {
+      event.preventDefault()
+      openBookmark({
+        title: site.title,
+        extranetUrl: site.origin,
+        intranetUrl: site.intranetUrl,
+        openInNewTab,
+        defaultIntranet,
+      })
+    }
+  }
 
   return (
     <div ref={menu.ref} className={`group/card relative h-full select-none [-webkit-touch-callout:none] ${lifted ? 'card-lifted scale-[1.03]' : 'card-surface'}`}>
@@ -88,12 +134,25 @@ function SmallCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
           target={openInNewTab ? '_blank' : '_self'}
           rel="noreferrer"
           draggable={false}
-          {...countClicks({ siteId: site.id })}
-          title={`${site.title}\n${hostOf(site.origin)}`}
+          onClick={handleCardClick}
+          onAuxClick={(event) => { if (event.button === 1) recordClick({ siteId: site.id }) }}
+          title={[site.title, site.description, hostOf(site.origin)].filter(Boolean).join('\n')}
           className={`flex min-w-0 flex-1 items-center gap-2.5 rounded-card p-2.5 ${focusRing}`}
         >
           <SiteIcon site={site} size={30} />
-          <span className="min-w-0 truncate text-sm font-medium">{site.title}</span>
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center gap-1">
+              <span className="min-w-0 truncate text-sm font-medium">{site.title}</span>
+              {site.intranetUrl && (
+                <span className="shrink-0 rounded-pill bg-accent-soft px-1 py-0.5 text-[10px] leading-none font-medium text-accent">
+                  内网
+                </span>
+              )}
+            </span>
+            {site.description && (
+              <span className="block truncate text-[11px] leading-4 text-muted">{site.description}</span>
+            )}
+          </span>
         </a>
         {site.links.length > 0 && (
           <button
@@ -114,7 +173,7 @@ function SmallCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
       {matched.length > 0 && !menu.open && (
         <div className="flex flex-wrap gap-1.5 px-2.5 pb-2.5">
           {matched.map((link) => (
-            <LinkChip openInNewTab={openInNewTab} key={link.id} site={site} link={link} matched editing={editing} onDelete={onDeleteLink} />
+            <LinkChip openInNewTab={openInNewTab} defaultIntranet={defaultIntranet} key={link.id} site={site} link={link} matched editing={editing} onDelete={onDeleteLink} />
           ))}
         </div>
       )}
@@ -130,10 +189,20 @@ function SmallCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
                 rel="noreferrer"
                 title={`${link.title}\n${link.path}`}
                 className={`min-w-0 flex-1 truncate rounded-control px-2.5 py-1.5 text-[13px] ${focusRing}`}
-                {...countClicks({ linkId: link.id })}
-                onClick={() => {
+                onAuxClick={(event) => { if (event.button === 1) recordClick({ linkId: link.id }) }}
+                onClick={(event) => {
                   recordClick({ linkId: link.id })
                   menu.setOpen(false)
+                  if (site.intranetUrl && isPlainClick(event)) {
+                    event.preventDefault()
+                    openBookmark({
+                      title: `${site.title} · ${link.title}`,
+                      extranetUrl: fullUrl(site.origin, link.path),
+                      intranetUrl: fullIntranetUrl(site.intranetUrl, link.path),
+                      openInNewTab,
+                      defaultIntranet,
+                    })
+                  }
                 }}
               >
                 {link.title}
@@ -157,7 +226,22 @@ function SmallCard({ site, editing, matchedLinks, handleProps, lifted, onEdit, o
   )
 }
 
-function ListRow({ site, editing, matchedLinks, handleProps, lifted, onEdit, onDelete, onDeleteLink, openInNewTab }: Props) {
+function ListRow({ site, editing, matchedLinks, handleProps, lifted, onEdit, onDelete, onDeleteLink, openInNewTab, defaultIntranet = true }: Props) {
+  const { openBookmark } = useUi()
+  const handleCardClick = (event: MouseEvent) => {
+    recordClick({ siteId: site.id })
+    if (site.intranetUrl && isPlainClick(event)) {
+      event.preventDefault()
+      openBookmark({
+        title: site.title,
+        extranetUrl: site.origin,
+        intranetUrl: site.intranetUrl,
+        openInNewTab,
+        defaultIntranet,
+      })
+    }
+  }
+
   return (
     <div className={`group/card relative flex min-w-0 max-w-full flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2 select-none overflow-hidden [-webkit-touch-callout:none] ${lifted ? 'card-lifted' : 'card-surface'}`}>
       <a
@@ -165,20 +249,29 @@ function ListRow({ site, editing, matchedLinks, handleProps, lifted, onEdit, onD
         target={openInNewTab ? '_blank' : '_self'}
         rel="noreferrer"
         draggable={false}
-        {...countClicks({ siteId: site.id })}
-        title={`${site.title}\n${hostOf(site.origin)}`}
+        onClick={handleCardClick}
+        onAuxClick={(event) => { if (event.button === 1) recordClick({ siteId: site.id }) }}
+        title={[site.title, site.description, hostOf(site.origin)].filter(Boolean).join('\n')}
         className={`flex min-w-0 max-w-full items-center gap-2.5 rounded-control ${
           site.links.length > 0 ? 'sm:w-72 sm:max-w-full' : 'flex-1'
         } ${editing ? 'pr-2' : ''} ${focusRing}`}
       >
         <SiteIcon site={site} size={26} />
         <span className="min-w-0 shrink truncate text-sm font-semibold">{site.title}</span>
+        {site.intranetUrl && (
+          <span className="shrink-0 rounded-pill bg-accent-soft px-1.5 py-0.5 text-[10px] leading-none font-medium text-accent">
+            内网
+          </span>
+        )}
         <span className="min-w-0 shrink truncate font-mono text-[11px] text-faint">{hostOf(site.origin)}</span>
+        {site.description && (
+          <span className="min-w-0 shrink truncate text-xs text-muted">{site.description}</span>
+        )}
       </a>
       {site.links.length > 0 && (
         <div className="flex min-w-0 flex-wrap gap-1.5 max-sm:order-last max-sm:basis-full sm:flex-1">
           {site.links.map((link) => (
-            <LinkChip openInNewTab={openInNewTab} key={link.id} site={site} link={link} matched={matchedLinks?.has(link.id)} editing={editing} onDelete={onDeleteLink} />
+            <LinkChip openInNewTab={openInNewTab} defaultIntranet={defaultIntranet} key={link.id} site={site} link={link} matched={matchedLinks?.has(link.id)} editing={editing} onDelete={onDeleteLink} />
           ))}
         </div>
       )}
@@ -189,6 +282,7 @@ function ListRow({ site, editing, matchedLinks, handleProps, lifted, onEdit, onD
 
 interface LinkChipProps {
   openInNewTab: boolean
+  defaultIntranet?: boolean
   site: Site
   link: Link
   matched?: boolean
@@ -196,7 +290,9 @@ interface LinkChipProps {
   onDelete?: (linkId: number) => void
 }
 
-function LinkChip({ site, link, matched, editing, onDelete, openInNewTab }: LinkChipProps) {
+function LinkChip({ site, link, matched, editing, onDelete, openInNewTab, defaultIntranet = true }: LinkChipProps) {
+  const { openBookmark } = useUi()
+  const target: ClickTarget = { linkId: link.id }
   return (
     <span
       className={`inline-flex min-w-0 max-w-full items-center rounded-pill text-xs font-medium transition ${
@@ -209,7 +305,20 @@ function LinkChip({ site, link, matched, editing, onDelete, openInNewTab }: Link
         target={openInNewTab ? '_blank' : '_self'}
         rel="noreferrer"
         draggable={false}
-        {...countClicks({ linkId: link.id })}
+        {...countClicks(target)}
+        onClick={(event) => {
+          recordClick(target)
+          if (site.intranetUrl && isPlainClick(event)) {
+            event.preventDefault()
+            openBookmark({
+              title: `${site.title} · ${link.title}`,
+              extranetUrl: fullUrl(site.origin, link.path),
+              intranetUrl: fullIntranetUrl(site.intranetUrl, link.path),
+              openInNewTab,
+              defaultIntranet,
+            })
+          }
+        }}
         title={`${link.title}\n${link.path}`}
         className={`min-w-0 max-w-44 truncate rounded-pill py-1 ${focusRing} ${editing ? 'pr-1 pl-2.5' : 'px-2.5'}`}
       >

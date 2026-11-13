@@ -12,10 +12,14 @@ export interface Link {
   title: string
 }
 
+export const MAX_SITE_DESCRIPTION_LENGTH = 200
+
 export interface Site {
   id: number
   origin: string
   title: string
+  description?: string
+  intranetUrl?: string
   /** 0 when no icon is stored here */
   iconVersion: number
   /** Address the browser loads the icon from, instead of one stored here */
