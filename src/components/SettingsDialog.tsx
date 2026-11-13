@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { Cloud, DatabaseBackup, LayoutGrid, LoaderCircle, MousePointerClick, Settings } from 'lucide-react'
+import { Cloud, DatabaseBackup, LayoutGrid, LoaderCircle, MousePointerClick, RefreshCw, Settings } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { MAX_SITE_NAME_LENGTH, type LayoutColumns, type SystemSettings } from '../../shared/settings'
 import type { Desktop, DesktopSummary } from '../../shared/types'
@@ -8,6 +8,7 @@ import { Dialog, useUi } from '../ui'
 import { BackupSettings } from './BackupSettings'
 import { SyncSettings } from './SyncSettings'
 import { ClipperSettings } from './ClipperSettings'
+import { UpdateSettings } from './UpdateSettings'
 import { platform } from '../platform'
 
 interface Props {
@@ -41,7 +42,7 @@ export function SettingsDialog({ open, ready, loadError, onRetry, ...props }: Pr
 function Content({ settings, importBusy, onBusyChange, ...backupProps }: Omit<Props, 'open' | 'ready' | 'loadError' | 'onRetry'> & { importBusy: boolean; onBusyChange: (busy: boolean) => void }) {
   const queryClient = useQueryClient()
   const { toast } = useUi()
-  const [tab, setTab] = useState<'general' | 'layout' | 'backup' | 'sync' | 'clipper'>('general')
+  const [tab, setTab] = useState<'general' | 'layout' | 'backup' | 'sync' | 'clipper' | 'update'>('general')
   const [name, setName] = useState(settings.siteName)
   const [openInNewTab, setOpenInNewTab] = useState(settings.openInNewTab)
   const [layoutColumns, setLayoutColumns] = useState(settings.layoutColumns)
@@ -80,6 +81,7 @@ function Content({ settings, importBusy, onBusyChange, ...backupProps }: Omit<Pr
           { id: 'backup', label: '备份与恢复', icon: DatabaseBackup },
           ...(platform.kind === 'extension' ? [{ id: 'sync', label: '云同步', icon: Cloud } as const] : []),
           ...(platform.clipper ? [{ id: 'clipper', label: '右键插件', icon: MousePointerClick } as const] : []),
+          ...(platform.update ? [{ id: 'update', label: '版本更新', icon: RefreshCw } as const] : []),
         ] as const).map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -89,7 +91,7 @@ function Content({ settings, importBusy, onBusyChange, ...backupProps }: Omit<Pr
             aria-selected={tab === id}
             aria-controls={`settings-panel-${id}`}
             disabled={importBusy}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-control px-2 py-2 text-xs font-medium transition sm:text-sm ${tab === id ? 'bg-surface text-fg shadow-xs' : 'text-muted hover:text-fg'}`}
+            className={`flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-control px-2 py-2 text-xs font-medium transition sm:text-sm ${tab === id ? 'bg-surface text-fg shadow-xs' : 'text-muted hover:text-fg'}`}
             onClick={() => setTab(id)}
           >
             <Icon size={15} className="hidden shrink-0 sm:block" />
@@ -194,6 +196,11 @@ function Content({ settings, importBusy, onBusyChange, ...backupProps }: Omit<Pr
       {platform.clipper && (
         <div role="tabpanel" id="settings-panel-clipper" aria-labelledby="settings-tab-clipper" hidden={tab !== 'clipper'}>
           {tab === 'clipper' && <ClipperSettings clipper={platform.clipper} />}
+        </div>
+      )}
+      {platform.update && (
+        <div role="tabpanel" id="settings-panel-update" aria-labelledby="settings-tab-update" hidden={tab !== 'update'}>
+          {tab === 'update' && <UpdateSettings update={platform.update} onBusyChange={onBusyChange} />}
         </div>
       )}
 

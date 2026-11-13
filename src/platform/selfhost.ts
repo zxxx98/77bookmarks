@@ -1,4 +1,4 @@
-import type { AccessTokenStatus } from '../../shared/types'
+import type { AccessTokenStatus, UpdateStatus, UpdateTriggerResult } from '../../shared/types'
 import type { Platform } from './types'
 
 const EXPIRED = '77bookmarks:session-expired'
@@ -96,5 +96,10 @@ export const selfhostPlatform: Platform = {
       return { code: `${window.location.origin}/#${token}`, createdAt }
     },
     revoke: async () => { await request('/token', 'DELETE') },
+  },
+  update: {
+    status: () => request<UpdateStatus>('/update'),
+    check: () => request<UpdateStatus>('/update/check', 'POST'),
+    apply: () => request<UpdateTriggerResult>('/update/apply', 'POST'),
   },
 }

@@ -31,7 +31,16 @@ if (password.length < 8) {
 
 await mkdir(dataDir, { recursive: true })
 const store = await openSqliteStore(join(dataDir, '77bookmarks.sqlite'))
-const app = await createApp({ store, password })
+const app = await createApp({
+  store,
+  password,
+  update: {
+    repo: process.env.UPDATE_REPO,
+    webhookUrl: process.env.UPDATE_WEBHOOK_URL,
+    webhookToken: process.env.UPDATE_WEBHOOK_TOKEN,
+    webhookMethod: process.env.UPDATE_WEBHOOK_METHOD,
+  },
+})
 
 async function readBody(request: IncomingMessage): Promise<Buffer | null> {
   const chunks: Buffer[] = []

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp } from './app'
 import { iconLinks, rememberMisses } from './icons'
 import { openSqliteStore, type SqliteStore } from './sqlite'
+import { compareVersions } from './update'
 
 const PASSWORD = 'correct horse battery'
 const ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII='
@@ -186,5 +187,101 @@ describe('icon discovery', () => {
     now = 7 * 60 * 60 * 1000
     fetcher.mockResolvedValue(ICON)
     expect(await cached('https://a.example')).toBe(ICON)
+  })
+})
+
+describe('self-hosted updates', () => {
+  it('compares semantic versions accurately', () => {
+    expect(compareVersions('2.1.2', '2.1.1')).toBe(1)
+    expect(compareVersions('v2.1.1', '2.1.1')).toBe(0)
+    expect(compareVersions('2.1.1', '2.2.0')).toBe(-1)
+    expect(compareVersions('2.2.0-beta.1', '2.2.0')).toBe(-1)
+    expect(compareVersions('2.2.0-beta.2', '2.2.0-beta.1')).toBe(1)
+  })
+
+  it('requires authentication and checks GitHub Releases for updates', async () => {
+    expect((await send('/api/update')).status).toBe(401)
+    expect((await send('/api/update/check', { method: 'POST' })).status).toBe(401)
+    expect((await send('/api/update/apply', { method: 'POST' })).status).toBe(401)
+
+    const fetchFn = vi.fn(async () => Response.json({
+      tag_name: 'v2.2.0',
+      html_url: 'https://github.com/zxxx98/77bookmarks/releases/tag/v2.2.0',
+      body: '新增版本更新检查',
+      published_at: '2026-11-13T00:00:00Z',
+    }))
+    const customApp = await createApp({
+      store,
+      password: PASSWORD,
+      fetchIcon,
+      update: { currentVersion: '2.1.1', fetchFn: fetchFn as unknown as typeof fetch },
+    })
+    const loginRes = await customApp.handle(new Request('http://bookmarks.test/api/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ password: PASSWORD }),
+    }))
+    const cookie = loginRes.headers.get('set-cookie')!.split(';')[0]
+
+    const initial = await (await customApp.handle(new Request('http://bookmarks.test/api/update', { headers: { cookie } }))).json()
+    expect(initial).toMatchObject({ currentVersion: '2.1.1', latestVersion: null, hasUpdate: false, canTriggerUpdate: false })
+
+    const checked = await (await customApp.handle(new Request('http://bookmarks.test/api/update/check', {
+      method: 'POST',
+      headers: { cookie },
+    }))).json()
+    expect(checked).toMatchObject({
+      currentVersion: '2.1.1',
+      latestVersion: '2.2.0',
+      hasUpdate: true,
+      releaseUrl: 'https://github.com/zxxx98/77bookmarks/releases/tag/v2.2.0',
+      releaseNotes: '新增版本更新检查',
+      error: null,
+    })
+
+    const applyWithoutWebhook = await customApp.handle(new Request('http://bookmarks.test/api/update/apply', {
+      method: 'POST',
+      headers: { cookie },
+    }))
+    expect(applyWithoutWebhook.status).toBe(400)
+    await customApp.service.syncStatus()
+    customApp.close()
+  })
+
+  it('triggers the configured update webhook with bearer auth', async () => {
+    const fetchFn = vi.fn(async () => new Response(null, { status: 200 }))
+    const customApp = await createApp({
+      store,
+      password: PASSWORD,
+      fetchIcon,
+      update: {
+        currentVersion: '2.1.1',
+        webhookUrl: 'http://watchtower:8080/v1/update',
+        webhookToken: 'secret-token',
+        fetchFn: fetchFn as unknown as typeof fetch,
+      },
+    })
+    const loginRes = await customApp.handle(new Request('http://bookmarks.test/api/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ password: PASSWORD }),
+    }))
+    const cookie = loginRes.headers.get('set-cookie')!.split(';')[0]
+
+    const applyRes = await customApp.handle(new Request('http://bookmarks.test/api/update/apply', {
+      method: 'POST',
+      headers: { cookie },
+    }))
+    expect(applyRes.status).toBe(200)
+    expect(await applyRes.json()).toMatchObject({ triggered: true })
+    expect(fetchFn).toHaveBeenCalledWith(
+      'http://watchtower:8080/v1/update',
+      expect.objectContaining({
+        method: 'POST',
+        headers: { authorization: 'Bearer secret-token' },
+      }),
+    )
+    await customApp.service.syncStatus()
+    customApp.close()
   })
 })

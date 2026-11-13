@@ -121,3 +121,21 @@ export interface Todo {
   /** null while open, otherwise when it was ticked off */
   doneAt: number | null
 }
+
+/** Current version and latest GitHub Release status for the self-hosted edition */
+export interface UpdateStatus {
+  currentVersion: string
+  latestVersion: string | null
+  hasUpdate: boolean
+  releaseUrl: string | null
+  releaseNotes: string | null
+  publishedAt: string | null
+  checkedAt: number | null
+  canTriggerUpdate: boolean
+  error: string | null
+}
+
+export interface UpdateTriggerResult {
+  triggered: boolean
+  message: string
+}

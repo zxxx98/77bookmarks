@@ -1,4 +1,4 @@
-import type { AccessTokenStatus } from '../../shared/types'
+import type { AccessTokenStatus, UpdateStatus, UpdateTriggerResult } from '../../shared/types'
 import type { LocalService, ServiceMethod } from '../storage/service'
 import type { SyncMethod, SyncResults } from '../sync/control'
 
@@ -43,5 +43,11 @@ export interface Platform {
     /** Replaces any earlier connection; the code is only ever shown once */
     create(): Promise<{ code: string; createdAt: number }>
     revoke(): Promise<void>
+  }
+  /** Checking for new releases and triggering updates; absent in the browser extension */
+  update?: {
+    status(): Promise<UpdateStatus>
+    check(): Promise<UpdateStatus>
+    apply(): Promise<UpdateTriggerResult>
   }
 }

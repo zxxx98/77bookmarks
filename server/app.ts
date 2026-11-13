@@ -5,6 +5,7 @@ import { fetchTitleHtml } from '../src/title-fetch'
 import { Auth } from './auth'
 import { fetchSiteIcon, rememberMisses } from './icons'
 import type { SqliteStore } from './sqlite'
+import { UpdateService, type UpdateServiceOptions } from './update'
 
 /** What the right-click extension may do: look up where to add, and add. Nothing else. */
 const TOKEN_METHODS: ServiceMethod[] = ['board', 'settings', 'addBookmark']
@@ -16,6 +17,7 @@ export interface AppOptions {
   store: SqliteStore
   password: string
   fetchIcon?: (origin: string) => Promise<string | null>
+  update?: UpdateServiceOptions
 }
 export interface RequestInfo {
   /** Address the login throttle counts wrong guesses against */
@@ -55,10 +57,11 @@ function sameOrigin(request: Request): boolean {
  * a password. It answers with web-standard requests and responses so it can be tested
  * without opening a port; `main.ts` connects it to Node's HTTP server.
  */
-export async function createApp({ store, password, fetchIcon = fetchSiteIcon }: AppOptions) {
+export async function createApp({ store, password, fetchIcon = fetchSiteIcon, update }: AppOptions) {
   const auth = new Auth(store, password)
   await auth.init()
   const service = new LocalService(async () => store.local, { fetchIcon: rememberMisses(fetchIcon) })
+  const updater = new UpdateService(update)
 
   const listeners = new Set<() => void>()
   const changed = () => { for (const listener of listeners) listener() }
@@ -184,6 +187,15 @@ export async function createApp({ store, password, fetchIcon = fetchSiteIcon }: 
       case 'GET /api/token': return json({ status: await auth.tokenStatus() })
       case 'POST /api/token': return json(await auth.createToken())
       case 'DELETE /api/token': await auth.revokeToken(); return json({ ok: true })
+      case 'GET /api/update': return json(updater.status())
+      case 'POST /api/update/check': return json(await updater.check(true))
+      case 'POST /api/update/apply': {
+        try {
+          return json(await updater.apply())
+        } catch (error) {
+          return fail(400, messageOf(error, '触发更新失败'))
+        }
+      }
       default: return fail(404, '接口不存在')
     }
   }
