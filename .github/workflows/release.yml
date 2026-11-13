@@ -1,0 +1,116 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.detect.outputs.changed }}
+      version: ${{ steps.detect.outputs.version }}
+      tag: ${{ steps.detect.outputs.tag }}
+      image: ${{ steps.detect.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - id: detect
+        shell: bash
+        run: |
+          cur_ver=$(node -p "require('./package.json').version")
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            changed=true
+          else
+            prev_sha="${{ github.event.before }}"
+            if [ -z "$prev_sha" ] || [ "$prev_sha" = "0000000000000000000000000000000000000000" ]; then
+              prev_sha=$(git rev-parse HEAD^ 2>/dev/null || true)
+            fi
+            prev_ver=""
+            if [ -n "$prev_sha" ]; then
+              prev_ver=$(git show "${prev_sha}:package.json" 2>/dev/null | node -e "const d=JSON.parse(require('fs').readFileSync(0,'utf8'));console.log(d.version)" || true)
+            fi
+            if [ "$cur_ver" != "$prev_ver" ]; then
+              changed=true
+            else
+              changed=false
+            fi
+          fi
+          repo_lower=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "changed=${changed}" >> "$GITHUB_OUTPUT"
+          echo "version=${cur_ver}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${cur_ver}" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${repo_lower}" >> "$GITHUB_OUTPUT"
+
+  release-extensions:
+    needs: check-version
+    if: needs.check-version.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run build:clipper
+
+      - name: Archive extension packages
+        run: |
+          ver="${{ needs.check-version.outputs.version }}"
+          (cd dist-extension && zip -r "../77bookmarks-extension-v${ver}.zip" .)
+          (cd dist-clipper && zip -r "../77bookmarks-clipper-v${ver}.zip" .)
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${{ needs.check-version.outputs.tag }}"
+          ver="${{ needs.check-version.outputs.version }}"
+          ext_zip="77bookmarks-extension-v${ver}.zip"
+          clip_zip="77bookmarks-clipper-v${ver}.zip"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "$ext_zip" "$clip_zip" --clobber
+          else
+            gh release create "$tag" "$ext_zip" "$clip_zip" --title "$tag" --generate-notes
+          fi
+
+  publish-docker:
+    needs: [check-version, release-extensions]
+    if: needs.check-version.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ needs.check-version.outputs.image }}:${{ needs.check-version.outputs.version }}
+            ${{ needs.check-version.outputs.image }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
