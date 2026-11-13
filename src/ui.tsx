@@ -321,10 +321,11 @@ interface DialogProps {
   title: string
   width?: string
   closeDisabled?: boolean
+  sidePanel?: ReactNode
   children: ReactNode
 }
 
-export function Dialog({ open, onClose, title, width = 'max-w-md', closeDisabled, children }: DialogProps) {
+export function Dialog({ open, onClose, title, width = 'max-w-md', closeDisabled, sidePanel, children }: DialogProps) {
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
 
@@ -357,29 +358,40 @@ export function Dialog({ open, onClose, title, width = 'max-w-md', closeDisabled
             if (!closeDisabled && event.target === event.currentTarget) onClose()
           }}
         >
-          <motion.div
-            role="dialog"
-            aria-modal="true"
-            aria-label={title}
-            className={`popover-panel w-full ${width} p-5`}
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.97, y: 6 }}
-            transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+          <div
+            className="relative flex w-full max-w-6xl flex-col items-center justify-center gap-4 lg:flex-row lg:items-start"
+            onMouseDown={(event) => {
+              if (!closeDisabled && event.target === event.currentTarget) onClose()
+            }}
           >
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h2 className="font-display text-base font-semibold">{title}</h2>
-              <button
-                className={`icon-btn-sm -mr-1 ${closeDisabled ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}
-                aria-label="关闭"
-                disabled={closeDisabled}
-                onClick={onClose}
-              >
-                <X size={16} />
-              </button>
-            </div>
-            {children}
-          </motion.div>
+            <motion.div
+              layout="position"
+              role="dialog"
+              aria-modal="true"
+              aria-label={title}
+              className={`popover-panel w-full shrink-0 p-5 ${sidePanel ? `${width} lg:max-w-lg xl:max-w-xl` : width}`}
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.97, y: 6 }}
+              transition={{ type: 'spring', stiffness: 420, damping: 32, layout: { duration: 0.18, ease: [0.2, 0.8, 0.2, 1] } }}
+            >
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h2 className="font-display text-base font-semibold">{title}</h2>
+                <button
+                  className={`icon-btn-sm -mr-1 ${closeDisabled ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}
+                  aria-label="关闭"
+                  disabled={closeDisabled}
+                  onClick={onClose}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+              {children}
+            </motion.div>
+            <AnimatePresence mode="popLayout" initial={false}>
+              {sidePanel}
+            </AnimatePresence>
+          </div>
         </motion.div>
       )}
     </AnimatePresence>

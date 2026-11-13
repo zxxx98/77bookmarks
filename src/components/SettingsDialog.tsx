@@ -1,15 +1,18 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { Cloud, DatabaseBackup, LayoutGrid, LoaderCircle, MousePointerClick, RefreshCw, Settings } from 'lucide-react'
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { MAX_SITE_NAME_LENGTH, type LayoutColumns, type SystemSettings } from '../../shared/settings'
 import type { Desktop, DesktopSummary } from '../../shared/types'
 import { api } from '../api'
 import { Dialog, useUi } from '../ui'
 import { BackupSettings } from './BackupSettings'
+import { ChromeImportPanel, useChromeImport, type ChromeImportController } from './ChromeImportSettings'
 import { SyncSettings } from './SyncSettings'
 import { ClipperSettings } from './ClipperSettings'
 import { UpdateSettings } from './UpdateSettings'
 import { platform } from '../platform'
+
+type SettingsTab = 'general' | 'layout' | 'backup' | 'sync' | 'clipper' | 'update'
 
 interface Props {
   open: boolean
@@ -25,9 +28,30 @@ interface Props {
 
 export function SettingsDialog({ open, ready, loadError, onRetry, ...props }: Props) {
   const [importBusy, setImportBusy] = useState(false)
+  const [tab, setTab] = useState<SettingsTab>('general')
+  const chrome = useChromeImport({
+    onImported: props.onImported,
+    onClose: props.onClose,
+    onBusyChange: setImportBusy,
+  })
+  const { clearFile } = chrome
+
+  useEffect(() => {
+    if (!open) return
+    setTab('general')
+    clearFile()
+  }, [open, clearFile])
+
   return (
-    <Dialog open={open} onClose={() => { if (!importBusy) props.onClose() }} closeDisabled={importBusy} title="系统设置" width="max-w-xl">
-      {ready ? <Content {...props} importBusy={importBusy} onBusyChange={setImportBusy} /> : (
+    <Dialog
+      open={open}
+      onClose={() => { if (!importBusy) props.onClose() }}
+      closeDisabled={importBusy}
+      title="系统设置"
+      width="max-w-xl"
+      sidePanel={ready && tab === 'backup' && chrome.file ? <ChromeImportPanel chrome={chrome} importBusy={importBusy} /> : undefined}
+    >
+      {ready ? <Content {...props} tab={tab} onTabChange={setTab} chrome={chrome} importBusy={importBusy} onBusyChange={setImportBusy} /> : (
         <div className="grid place-items-center gap-3 py-8 text-sm text-muted" role="status">
           {loadError ? <>
             <p>设置加载失败</p>
@@ -39,10 +63,23 @@ export function SettingsDialog({ open, ready, loadError, onRetry, ...props }: Pr
   )
 }
 
-function Content({ settings, importBusy, onBusyChange, ...backupProps }: Omit<Props, 'open' | 'ready' | 'loadError' | 'onRetry'> & { importBusy: boolean; onBusyChange: (busy: boolean) => void }) {
+function Content({
+  settings,
+  tab,
+  onTabChange,
+  chrome,
+  importBusy,
+  onBusyChange,
+  ...backupProps
+}: Omit<Props, 'open' | 'ready' | 'loadError' | 'onRetry'> & {
+  tab: SettingsTab
+  onTabChange: (tab: SettingsTab) => void
+  chrome: ChromeImportController
+  importBusy: boolean
+  onBusyChange: (busy: boolean) => void
+}) {
   const queryClient = useQueryClient()
   const { toast } = useUi()
-  const [tab, setTab] = useState<'general' | 'layout' | 'backup' | 'sync' | 'clipper' | 'update'>('general')
   const [name, setName] = useState(settings.siteName)
   const [openInNewTab, setOpenInNewTab] = useState(settings.openInNewTab)
   const [layoutColumns, setLayoutColumns] = useState(settings.layoutColumns)
@@ -99,7 +136,7 @@ function Content({ settings, importBusy, onBusyChange, ...backupProps }: Omit<Pr
             aria-controls={`settings-panel-${id}`}
             disabled={importBusy}
             className={`flex min-w-0 flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-control px-2 py-2 text-xs font-medium transition sm:gap-1.5 sm:text-[13px] ${tab === id ? 'bg-surface text-fg shadow-xs' : 'text-muted hover:text-fg'}`}
-            onClick={() => setTab(id)}
+            onClick={() => onTabChange(id)}
           >
             <Icon size={14} className="hidden shrink-0 sm:block" />
             {label}
@@ -208,7 +245,7 @@ function Content({ settings, importBusy, onBusyChange, ...backupProps }: Omit<Pr
         </form>
       </div>
       <div role="tabpanel" id="settings-panel-backup" aria-labelledby="settings-tab-backup" hidden={tab !== 'backup'}>
-        <BackupSettings {...backupProps} onBusyChange={onBusyChange} importBusy={importBusy} />
+        <BackupSettings {...backupProps} chrome={chrome} onBusyChange={onBusyChange} importBusy={importBusy} />
       </div>
       {platform.kind === 'extension' && (
         <div role="tabpanel" id="settings-panel-sync" aria-labelledby="settings-tab-sync" hidden={tab !== 'sync'}>

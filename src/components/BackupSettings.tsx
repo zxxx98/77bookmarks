@@ -5,7 +5,7 @@ import type { Desktop, DesktopSummary, ImportMode } from '../../shared/types'
 import { api } from '../api'
 import { platform } from '../platform'
 import { useAct, useUi } from '../ui'
-import { ChromeImportSettings } from './ChromeImportSettings'
+import { ChromeImportSettings, type ChromeImportController } from './ChromeImportSettings'
 
 interface Props {
   onClose: () => void
@@ -15,6 +15,7 @@ interface Props {
   onImported: (desktopId: number) => void
   onBusyChange: (busy: boolean) => void
   importBusy: boolean
+  chrome: ChromeImportController
 }
 
 function download(blob: Blob, filename: string) {
@@ -32,7 +33,7 @@ const MODES: { value: ImportMode; label: string; hint: string }[] = [
   { value: 'replace', label: '替换全部数据', hint: '完整备份还会恢复待办和设置' },
 ]
 
-export function BackupSettings({ onClose, desktops, desktop, onImported, onBusyChange, importBusy }: Props) {
+export function BackupSettings({ onClose, desktops, desktop, onImported, onBusyChange, importBusy, chrome }: Props) {
   const act = useAct()
   const { confirm, toast } = useUi()
   const fileInput = useRef<HTMLInputElement>(null)
@@ -198,7 +199,7 @@ export function BackupSettings({ onClose, desktops, desktop, onImported, onBusyC
           </>
         )}
       </section>
-      <ChromeImportSettings desktops={desktops} onImported={onImported} onClose={onClose} onBusyChange={onBusyChange} importBusy={importBusy} />
+      <ChromeImportSettings desktops={desktops} chrome={chrome} importBusy={importBusy} />
     </div>
   )
 }
