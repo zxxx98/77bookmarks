@@ -1,15 +1,39 @@
 # 77 Bookmarks
 
+[中文](README.md) | [English](README.en.md)
+
 Chrome / Edge 本地新标签页扩展，也支持 Docker 自部署与配套的精简右键添加插件。两版共用同一套界面与数据服务。
 
-支持多桌面、分组置顶、拖动排序、大卡片 / 小卡片 / 列表、跨桌面搜索、四种视觉风格、明暗主题、待办和点击统计。添加网址时，域名成为卡片，子路径成为卡片上的链接，同一桌面里的相同网站自动合并。
+支持多桌面、分组置顶、拖动排序、大卡片 / 小卡片 / 列表、可配置分组列数、按点击频率自动排序、跨桌面搜索、四种视觉风格（温润纸感 / 精密工作台 / 瑞士目录 / 柔和野兽派）、明暗主题、待办和点击统计。添加网址时，域名成为卡片，子路径成为卡片上的链接，同一桌面里的相同网站自动合并。
+
+## 界面预览
+
+| 浅色主题（温润纸感） | 深色主题（精密工作台） |
+|---|---|
+| ![浅色主题预览](docs/images/preview-light.png) | ![深色主题预览](docs/images/preview-dark.png) |
 
 ## Docker 自部署（可选）
 
 适合多设备共用同一份书签、不替换浏览器新标签页的场景。数据存储在容器 `/data` 卷内的 SQLite 文件中，通过单用户密码登录；与扩展版使用相同的备份格式，可直接互相导入。
 
+> 注：自部署版数据直接保存在服务端 SQLite 中，不提供扩展版的「云同步」配置项。
+
+使用仓库源码构建并启动：
+
 ```bash
 ADMIN_PASSWORD='your-strong-password' docker compose up -d --build
+```
+
+也可直接拉取 GitHub Container Registry 的预构建多架构镜像（`linux/amd64`、`linux/arm64`）：
+
+```bash
+docker run -d \
+  --name 77bookmarks \
+  --restart unless-stopped \
+  -p 8080:8080 \
+  -e ADMIN_PASSWORD='your-strong-password' \
+  -v 77bookmarks-data:/data \
+  ghcr.io/zxxx98/77bookmarks:latest
 ```
 
 默认监听 `8080` 端口（可通过 `PORT=9000` 修改）。环境变量：
@@ -26,21 +50,23 @@ ADMIN_PASSWORD='your-strong-password' docker compose up -d --build
 
 自部署版不接管新标签页，可单独安装只有右键添加功能的精简插件：
 
+- 直接从 [GitHub Releases](https://github.com/zxxx98/77bookmarks/releases) 下载 `77bookmarks-clipper-v*.zip` 并解压，或从源码构建：
+
 ```bash
 npm install
 npm run build:clipper
 ```
 
-1. 打开 `chrome://extensions`（Edge 为 `edge://extensions`），开启「开发者模式」，加载 **`dist-clipper/`** 目录。
-2. 登录自部署网页后，打开「更多 → 系统设置 → 浏览器插件」，点击「生成连接码」。
+1. 打开 `chrome://extensions`（Edge 为 `edge://extensions`），开启「开发者模式」，加载解压后的目录或构建生成的 **`dist-clipper/`** 目录。
+2. 登录自部署网页后，打开「更多 → 系统设置 → 右键插件」，点击「生成连接码」。
 3. 点击插件图标（或打开插件选项页），粘贴连接码并授权访问你的服务器地址，选择默认桌面与分组。
 4. 之后可在任意网页或链接上右键选择「添加当前网页到 77 Bookmarks」或「添加此链接到 77 Bookmarks」。
 
-该插件权限仅包含 `contextMenus`、`storage`、`activeTab`、`scripting` 与你授权的那一个服务器地址；连接码只具备读取桌面列表和添加书签的权限，不能修改、删除或导出数据。
+该插件权限仅包含 `contextMenus`、`storage`、`activeTab`、`scripting` 与你授权的那一个服务器地址；连接码只具备读取桌面列表与分组、添加书签的权限，不能修改、删除或导出数据。
 
-## 扩展版构建与安装
+## 扩展版安装与构建
 
-需要 Node.js 22.12+ 和 Chrome / Edge 120+。
+需要 Chrome / Edge 120+。可直接从 [GitHub Releases](https://github.com/zxxx98/77bookmarks/releases) 下载 `77bookmarks-extension-v*.zip` 解压安装，或从源码构建（需要 Node.js 22.12+）：
 
 ```bash
 npm install
@@ -48,13 +74,13 @@ npm run build:extension
 ```
 
 1. 打开 `chrome://extensions`（Edge 为 `edge://extensions`），开启右上角的「开发者模式」。
-2. 点击「加载已解压的扩展程序」，选择项目生成的 **`dist-extension/`** 目录。`extension/` 是源代码目录，不能直接安装。
+2. 点击「加载已解压的扩展程序」，选择解压后的目录或项目生成的 **`dist-extension/`** 目录。`extension/` 是源代码目录，不能直接安装。
 3. 打开一个新标签页。如果浏览器提示新标签页已被扩展更改，请保留该更改。
 4. 可在扩展菜单中固定工具栏图标，便于收藏当前页面。
 
 安装后日常使用无需运行 npm、Node.js 或本地服务。不要直接双击 HTML 文件。
 
-更新时，重新构建到同一路径，再在扩展管理页点击「重新加载」。保持相同的扩展目录和浏览器个人资料；不要为了升级卸载重装。切换扩展身份或目录前先导出备份。
+更新时，重新解压或构建到同一路径，再在扩展管理页点击「重新加载」。保持相同的扩展目录和浏览器个人资料；不要为了升级卸载重装。切换扩展身份或目录前先导出备份。
 
 如果同时安装了多个替换新标签页的扩展，请在扩展管理页选择启用哪一个。
 
@@ -77,7 +103,7 @@ npm run build:extension
 
 ## 本地数据与离线使用
 
-书签、待办、点击统计和已保存图标存储在该扩展的 IndexedDB 中；轻量偏好镜像到 `chrome.storage.local`，页面用 localStorage 缓存启动外观。数据按浏览器个人资料隔离，不随浏览器账号自动同步。
+扩展版的书签、待办、点击统计和已保存图标存储在扩展的 IndexedDB 中；轻量偏好镜像到 `chrome.storage.local`，页面用 `localStorage` 缓存启动外观。数据按浏览器个人资料隔离，不随浏览器账号自动同步。
 
 - 断网时仍可查看、搜索、添加、编辑、排序、备份和恢复本地数据。
 - 打开外部网站、在线搜索和显示未缓存的远程图片仍需网络。
@@ -92,7 +118,7 @@ npm run build:extension
 
 图标优先从 Chrome 的 favicon 缓存读取并保存到本地；没有可用图标时显示字母。卡片编辑支持上传图片（最多 100 KB）或填写图片的网络地址。上传和缓存的图标可以离线使用；仅保存地址的远程图标在离线时可能显示字母，备份只包含地址。
 
-权限用途：
+扩展版权限用途：
 
 | 权限 | 用途 |
 |---|---|
@@ -123,7 +149,7 @@ npm run build:extension
 
 ## 云同步（可选）
 
-在「更多 → 系统设置 → 云同步」配置，默认关闭。支持 **Cloudflare Worker + D1** 和 **WebDAV**。每台设备填写相同的服务器地址和凭据，勾选启用并保存；也可先点击「测试连接」。
+仅扩展版提供，在「更多 → 系统设置 → 云同步」配置，默认关闭。支持 **Cloudflare Worker + D1** 和 **WebDAV**。每台设备填写相同的服务器地址和凭据，勾选启用并保存；也可先点击「测试连接」。
 
 - 同步桌面、分组、卡片、子链接、待办、点击统计和系统设置；主题、搜索引擎等偏好保留在各端。
 - 图标图片和缓存状态不上传，各端按需从浏览器 favicon 缓存获取。自定义图标的网络地址会随卡片同步；上传的图片只留在本机及完整备份。
@@ -184,13 +210,13 @@ WebDAV 通常不提供浏览器跨域支持，建议在已安装的扩展中使�
 ## 开发与验证
 
 ```bash
-npm run dev          # http://localhost:8788，带热更新
+npm run dev            # http://localhost:8788，带热更新
 npm run typecheck
 npm test
-npm run build        # 生成扩展版 dist/ 和 dist-extension/
+npm run build          # 生成扩展版 dist/ 和 dist-extension/
 npm run build:selfhost # 生成自部署版 dist-selfhost/
 npm run build:clipper  # 生成精简右键插件 dist-clipper/
-npm run preview      # http://localhost:8788，预览构建结果
+npm run preview        # http://localhost:8788，预览构建结果
 ```
 
 HTTP 预览直接使用同一套 IndexedDB 数据服务，只供界面开发。它与已安装扩展是不同来源，数据各自独立；右键、工具栏和新标签页替换应在真实扩展中测试。不要依赖 Vite 开发服务器运行已安装扩展；扩展应加载生产构建。
@@ -201,7 +227,7 @@ HTTP 预览直接使用同一套 IndexedDB 数据服务，只供界面开发。�
 npx playwright install chromium  # 首次安装测试用浏览器
 npm run test:extension            # 先构建，再在临时浏览器资料中测试
 npm run test:drag:extension       # 拖动后的动画落点、逐帧顺序、跨分组移动与取消
-npm ci --prefix sync-worker
+npm run ci --prefix sync-worker
 npm run test:sync:extension       # 两个扩展资料 + 本地真实 Worker/D1 + WebDAV 条件写入
 ```
 
