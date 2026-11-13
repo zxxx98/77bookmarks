@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "77 Bookmarks",
   "description": "本地优先的新标签页书签桌面：多桌面、分组、待办与使用统计，可选云同步。",
-  "version": "2.1.0",
+  "version": "2.1.1",
   "minimum_chrome_version": "120",
   "permissions": [
     "contextMenus",

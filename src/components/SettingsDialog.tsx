@@ -78,7 +78,7 @@ function Content({ settings, importBusy, onBusyChange, ...backupProps }: Omit<Pr
           { id: 'general', label: '基本设置', icon: Settings },
           { id: 'layout', label: '布局设置', icon: LayoutGrid },
           { id: 'backup', label: '备份与恢复', icon: DatabaseBackup },
-          { id: 'sync', label: '云同步', icon: Cloud },
+          ...(platform.kind === 'extension' ? [{ id: 'sync', label: '云同步', icon: Cloud } as const] : []),
           ...(platform.clipper ? [{ id: 'clipper', label: '右键插件', icon: MousePointerClick } as const] : []),
         ] as const).map(({ id, label, icon: Icon }) => (
           <button
@@ -186,9 +186,11 @@ function Content({ settings, importBusy, onBusyChange, ...backupProps }: Omit<Pr
       <div role="tabpanel" id="settings-panel-backup" aria-labelledby="settings-tab-backup" hidden={tab !== 'backup'}>
         <BackupSettings {...backupProps} onBusyChange={onBusyChange} importBusy={importBusy} />
       </div>
-      <div role="tabpanel" id="settings-panel-sync" aria-labelledby="settings-tab-sync" hidden={tab !== 'sync'}>
-        <SyncSettings onBusyChange={onBusyChange} importBusy={importBusy} />
-      </div>
+      {platform.kind === 'extension' && (
+        <div role="tabpanel" id="settings-panel-sync" aria-labelledby="settings-tab-sync" hidden={tab !== 'sync'}>
+          <SyncSettings onBusyChange={onBusyChange} importBusy={importBusy} />
+        </div>
+      )}
       {platform.clipper && (
         <div role="tabpanel" id="settings-panel-clipper" aria-labelledby="settings-tab-clipper" hidden={tab !== 'clipper'}>
           {tab === 'clipper' && <ClipperSettings clipper={platform.clipper} />}

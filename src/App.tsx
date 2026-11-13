@@ -8,6 +8,7 @@ import type { BoardPage, View } from '../shared/types'
 import { DEFAULT_GROUP_NAME } from '../shared/sync'
 import { parseBookmarkUrl } from '../shared/url'
 import { api } from './api'
+import { platform } from './platform'
 import { onDataChanged } from './storage/client'
 import { updateBoardCache } from './board-cache'
 import { recordClick } from './clicks'
@@ -61,6 +62,7 @@ export default function App() {
   }, [siteName])
 
   useEffect(() => {
+    if (platform.kind !== 'extension') return
     // New tabs pull remote edits through the single background engine. Disabled sync
     // returns immediately without making network requests.
     void api.syncStatus().then(({ config }) => { if (config.enabled) return api.syncNow() }).catch(() => undefined)
