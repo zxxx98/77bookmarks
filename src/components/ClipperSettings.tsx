@@ -78,9 +78,12 @@ export function ClipperSettings({ clipper }: { clipper: NonNullable<Platform['cl
       <p className="leading-relaxed text-muted">安装右键插件后，在任意网页或链接上点右键，就能把它添加到这里。</p>
       <ol className="mt-3 list-decimal space-y-1.5 pl-5 leading-relaxed text-muted">
         <li>
-          在项目里运行 <code className={mono}>npm run build:clipper</code>，在 Chrome 或 Edge 打开 <code className={mono}>chrome://extensions</code>，开启「开发者模式」，点击「加载已解压的扩展程序」并选择 <code className={mono}>dist-clipper</code> 目录。
+          从 <a href="https://github.com/zxxx98/77bookmarks/releases/latest" target="_blank" rel="noreferrer" className="text-accent hover:underline">GitHub Release</a> 下载 <code className={mono}>77bookmarks-clipper-v*.zip</code> 并解压。
         </li>
-        <li>在下面生成连接码，粘贴到插件的选项页。</li>
+        <li>
+          在 Chrome 打开 <code className={mono}>chrome://extensions</code>（Edge 为 <code className={mono}>edge://extensions</code>），开启「开发者模式」，点击「加载已解压的扩展程序」并选择解压后的目录。
+        </li>
+        <li>在下面生成连接码，点击插件图标打开选项页，粘贴连接码并授权访问服务器，选择默认桌面与分组。</li>
       </ol>
 
       <div className="mt-5 rounded-control border border-line bg-surface-2 p-3.5">
