@@ -148,6 +148,7 @@ describe('textFragmentUrl', () => {
 describe('selectionTitle', () => {
   it('collapses whitespace and caps the length', () => {
     expect(selectionTitle(' a\n b ')).toBe('a b')
-    expect(selectionTitle('x'.repeat(200))).toHaveLength(80)
+    expect(selectionTitle('字'.repeat(30))).toBe('字'.repeat(30))
+    expect(selectionTitle('字'.repeat(31))).toBe(`${'字'.repeat(30)}…`)
   })
 })

@@ -89,7 +89,7 @@ If multiple extensions override the New Tab page, enable the one you want in `ch
 - Click the toolbar icon, pick a desktop and group, and save the current page.
 - Right-click on any blank area of a page and select **Add current page to 77 Bookmarks**.
 - Right-click on a link and select **Add this link to 77 Bookmarks**.
-- Select some text, right-click it and choose **Add selected text to 77 Bookmarks** (`添加选中文字到 77 Bookmarks`). The bookmark is named after the selection, and opening it makes the browser scroll to that text and highlight it; if the page has changed and the text is gone, it opens as a normal link.
+- Select some text, right-click it and choose **Add selected text to 77 Bookmarks** (`添加选中文字到 77 Bookmarks`). The bookmark is named after the first 30 characters of the selection, and opening it makes the browser scroll to that text and highlight it; if the page has changed and the text is gone, it opens as a normal link.
 - Default keyboard shortcut: `Alt+Shift+B` (customizable at `chrome://extensions/shortcuts`).
 - Context menus and shortcuts remember the last desktop and group selected in the popup, falling back to the first desktop and default group if deleted.
 - On the bookmark board, you can also paste a URL directly or click **Add** (`添加`).

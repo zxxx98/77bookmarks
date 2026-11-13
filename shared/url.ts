@@ -136,7 +136,11 @@ export function textFragmentUrl(url: string, selection: string): string {
   return `${base}${base.includes('#') ? '' : '#'}:~:text=${directive}`
 }
 
-/** Link title for a bookmarked selection */
+const SELECTION_TITLE_MAX = 30
+
+/** Link title for a bookmarked selection: its opening words */
 export function selectionTitle(selection: string): string {
-  return selection.replace(/\s+/g, ' ').trim().slice(0, 80)
+  const text = selection.replace(/\s+/g, ' ').trim()
+  const chars = [...text]
+  return chars.length > SELECTION_TITLE_MAX ? `${chars.slice(0, SELECTION_TITLE_MAX).join('').trimEnd()}…` : text
 }
