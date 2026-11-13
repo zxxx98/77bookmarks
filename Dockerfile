@@ -11,7 +11,7 @@ ENV NODE_ENV=production \
     PORT=8080 \
     DATA_DIR=/data
 COPY --from=builder --chown=node:node /app/dist-selfhost ./
-RUN mkdir -p /data && chown node:node /data
+RUN mkdir -p /data && chown node:node /app /data
 USER node
 EXPOSE 8080
 VOLUME ["/data"]

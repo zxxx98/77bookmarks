@@ -6,7 +6,7 @@ import { useUi } from '../ui'
 import { formatAgo, formatDate } from '../usage'
 
 const COMPOSE_COMMAND = 'docker compose pull && docker compose up -d'
-const DOCKER_IMAGE_COMMAND = 'docker pull ghcr.io/zxxx98/77bookmarks:latest'
+const BUILD_COMMAND = 'docker compose up -d --build'
 
 /** Self-hosted version check, release notes, in-place update, and Docker update commands */
 export function UpdateSettings({ update, onBusyChange }: { update: NonNullable<Platform['update']>; onBusyChange: (busy: boolean) => void }) {
@@ -209,12 +209,17 @@ export function UpdateSettings({ update, onBusyChange }: { update: NonNullable<P
       <div className="rounded-control border border-line bg-surface-2 p-3.5">
         <p className="font-medium">Docker 更新方式</p>
         <p className="mt-1 text-xs leading-relaxed text-faint">
-          在宿主机项目目录执行以下命令即可升级到最新版本（数据保存在持久化卷中不会丢失）：
+          根据部署方式在宿主机项目目录执行对应命令，保留数据卷：
         </p>
         <div className="mt-2.5 space-y-2">
-          <CommandRow label="Compose 更新命令" command={COMPOSE_COMMAND} onCopy={() => void copyCommand(COMPOSE_COMMAND, '更新命令')} />
-          <CommandRow label="镜像拉取命令" command={DOCKER_IMAGE_COMMAND} onCopy={() => void copyCommand(DOCKER_IMAGE_COMMAND, '拉取命令')} />
+          <p className="text-xs text-faint">使用远程镜像的 Compose 配置：</p>
+          <CommandRow label="Compose 镜像更新命令" command={COMPOSE_COMMAND} onCopy={() => void copyCommand(COMPOSE_COMMAND, '更新命令')} />
+          <p className="text-xs text-faint">使用本仓库默认 Compose 配置：先更新源码，再重新构建：</p>
+          <CommandRow label="Compose 源码构建命令" command={BUILD_COMMAND} onCopy={() => void copyCommand(BUILD_COMMAND, '构建命令')} />
         </div>
+        <p className="mt-2.5 text-xs leading-relaxed text-faint">
+          使用 docker run 部署时，需拉取新镜像并使用原有配置和数据卷重建容器；仅拉取镜像不会更新运行中的容器。
+        </p>
         {status?.hasUpdate && !status.canTriggerUpdate && (
           <p className="mt-2.5 text-xs leading-relaxed text-faint">
             提示：当前版本未检测到可用的在线更新包（或非打包环境运行），请使用上方 Docker 命令升级。
