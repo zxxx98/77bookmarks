@@ -135,13 +135,13 @@ Browsing history is never read. Cloud sync is disabled by default and makes no n
 
 ## Private Spaces
 
-The lock in the top bar (or `Alt+P`) is the one way into every private space: type a password to open the space it belongs to; if there is none, type the same password again to create one (at least 8 characters). Each space is a board of its own, with its own desktops, groups, bookmarks and to-dos.
+Nothing in the interface leads to the private spaces; they are reached by shortcut only: `Alt+P` asks for a password and opens the space it belongs to, `Alt+Shift+P` creates a space (at least 8 characters). They cannot be opened on a device without a keyboard. Each space is a board of its own, with its own desktops, groups, bookmarks and to-dos.
 
 - **Several spaces, invisible to each other**: different passwords open different spaces. Neither the interface nor the storage has a list of spaces, so knowing one password does not reveal whether there are others.
 - **Ciphertext only**: contents are encrypted in the page (scrypt + XChaCha20-Poly1305) before they are stored. The browser's local database, the self-hosted server's database, cloud sync and full backups only ever hold a bag of equally sized encrypted records, mixed with random ones from the first start, so nothing shows how many spaces there are, or whether there are any.
 - **Opened in incognito**: every address in a space opens in an incognito window. The extension edition needs no extra permission and no "Allow in Incognito"; the self-hosted edition asks the connected right-click extension to open it, and without one offers to copy the link rather than quietly opening it in the normal window.
 - **No traces**: inside a space no icons or titles are fetched, no clicks are counted, no intranet address is probed and nothing is written to the browser's local state. The password lives only in the memory of the current tab: closing or reloading it, pressing `Alt+P` or five idle minutes lock the space.
-- **Managing**: with a space open, the "隐私空间" button in the top bar locks it, changes its password or deletes it. The entry button can be hidden under System Settings → General, leaving only the shortcut.
+- **Managing**: with a space open, the "隐私空间" button in the top bar locks it, changes its password or deletes it. That button is only there while a space is open.
 
 Limits worth knowing:
 
@@ -214,7 +214,8 @@ Your WebDAV server must provide **strong ETags** and properly support `If-Match`
 | `←` / `→`, `Tab` / `Shift+Tab` | Switch desktops (swipe left/right on touchscreens) |
 | `Alt+C` | Collapse / expand all groups on current desktop |
 | `Alt+T` | Open to-do panel and focus input |
-| `Alt+P` | Open the way into private spaces; locks at once while one is open |
+| `Alt+P` | Ask for a password and open its private space; locks at once while one is open |
+| `Alt+Shift+P` | Create a private space |
 | Letters / Numbers | Focus search box and type |
 | `Ctrl+V` / `⌘V` | Open Add Bookmark dialog if clipboard contains a valid URL |
 | `Enter` | Search, or finish layout editing |

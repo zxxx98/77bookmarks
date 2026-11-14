@@ -306,11 +306,11 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
         return
       }
 
-      // Opens the way into the private spaces, and is the quickest way out of one
+      // The only way into the private spaces, with Shift to create one, and the quickest way out
       if (event.altKey && (event.key.toLowerCase() === 'p' || event.code === 'KeyP')) {
         event.preventDefault()
         if (isPrivate) privateSpace.lock()
-        else setPrivateAction('unlock')
+        else setPrivateAction(event.shiftKey ? 'create' : 'unlock')
         return
       }
 

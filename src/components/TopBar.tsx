@@ -1,4 +1,4 @@
-import { BookmarkPlus, ChartNoAxesColumn, Check, ChevronDown, CornerDownLeft, Ellipsis, FoldVertical, FolderPlus, ListTodo, Lock, LogOut, Monitor, Moon, Palette, Pencil, Plus, Settings, Sun, UnfoldVertical, X } from 'lucide-react'
+import { BookmarkPlus, ChartNoAxesColumn, Check, ChevronDown, CornerDownLeft, Ellipsis, FoldVertical, FolderPlus, ListTodo, LogOut, Monitor, Moon, Palette, Pencil, Plus, Settings, Sun, UnfoldVertical, X } from 'lucide-react'
 import type { RefObject } from 'react'
 import type { Desktop, DesktopSummary, View } from '../../shared/types'
 import { SEARCH_ENGINES, SearchEngineIcon, useSearchEngine, type SearchEngineId } from '../engines'
@@ -6,7 +6,7 @@ import { STYLE_PRESETS, useStyle, useTheme, type StyleId, type StylePreset, type
 import { useLogout } from '../session'
 import { usePopover } from '../ui'
 import { privateSpace } from '../private/session'
-import { usePrivateActive, usePrivateEntryShown } from '../private/use'
+import { usePrivateActive } from '../private/use'
 import { DesktopSwitcher } from './DesktopSwitcher'
 import { PrivateSpaceButton, type PrivateAction } from './PrivateSpace'
 import { ViewSwitch } from './ViewSwitch'
@@ -96,7 +96,6 @@ export function TopBar({
   const [engine] = useSearchEngine()
   const hasQuery = query.length > 0
   const privateActive = usePrivateActive()
-  const entryShown = usePrivateEntryShown()
 
   return (
     <header className={`sticky top-0 z-30 border-b-[length:var(--border-w)] bg-bg/85 backdrop-blur-md ${privateActive ? 'border-accent' : 'border-line'}`}>
@@ -191,8 +190,8 @@ export function TopBar({
             </span>
           )}
         </button>
-        {/* An open space always shows its way out; the way in can be hidden in the settings */}
-        {(privateActive || entryShown) && <PrivateSpaceButton onAction={onPrivate} className={privateActive ? '' : 'max-md:hidden'} />}
+        {/* Only an open space shows itself, with its way out. The way in is a shortcut and nothing on screen. */}
+        {privateActive && <PrivateSpaceButton onAction={onPrivate} />}
         <ThemeMenu theme={theme} onTheme={setTheme} styleId={styleId} activePreset={activePreset} onStyle={setStyleId} className="max-md:hidden" />
         <button
           className={`icon-btn ${editing ? '!bg-accent-soft !text-accent' : ''}`}
@@ -214,7 +213,6 @@ export function TopBar({
           onToggleCollapseAll={onToggleCollapseAll}
           onSettings={onSettings}
           onUsage={onUsage}
-          onPrivate={privateActive || !entryShown ? undefined : () => onPrivate('unlock')}
         />
         <AddMenu onAdd={onAdd} onCreateGroup={onCreateGroup} />
       </div>
@@ -419,11 +417,9 @@ interface MenuProps {
   onToggleCollapseAll?: () => void
   onSettings: () => void
   onUsage: () => void
-  /** Opens the way into the private spaces, where the top bar has no room for its button */
-  onPrivate?: () => void
 }
 
-function MoreMenu({ view, onView, theme, onTheme, styleId, onStyle, allCollapsed, onToggleCollapseAll, onSettings, onUsage, onPrivate }: MenuProps) {
+function MoreMenu({ view, onView, theme, onTheme, styleId, onStyle, allCollapsed, onToggleCollapseAll, onSettings, onUsage }: MenuProps) {
   const menu = usePopover<HTMLDivElement>()
 
   const item = 'flex w-full items-center gap-2.5 rounded-control px-2.5 py-2 text-left text-sm hover:bg-fg/6'
@@ -482,12 +478,6 @@ function MoreMenu({ view, onView, theme, onTheme, styleId, onStyle, allCollapsed
             </div>
             <div className="my-1 h-px bg-line" />
           </div>
-          {onPrivate && (
-            <button className={`${item} md:hidden`} onClick={() => { close(); onPrivate() }}>
-              <Lock size={15} className="text-muted" />
-              隐私空间
-            </button>
-          )}
           <button
             className={item}
             onClick={() => {

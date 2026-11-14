@@ -1,4 +1,4 @@
-import { Copy, EyeOff, KeyRound, LoaderCircle, Lock, LockOpen, Trash2 } from 'lucide-react'
+import { Copy, EyeOff, KeyRound, LoaderCircle, LockOpen, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
 import { MIN_PASSWORD_LENGTH } from '../../shared/vault'
 import { INCOGNITO_UNAVAILABLE, openInIncognito } from '../private/open'
@@ -6,7 +6,7 @@ import { privateSpace } from '../private/session'
 import { usePrivateActive } from '../private/use'
 import { Dialog, usePopover, useUi } from '../ui'
 
-export type PrivateAction = 'unlock' | 'password'
+export type PrivateAction = 'unlock' | 'create' | 'password'
 
 const messageOf = (error: unknown) => (error instanceof Error && error.message ? error.message : '操作失败，请重试')
 
@@ -47,20 +47,17 @@ function SecretInput({ value, onChange, onEnter, placeholder, disabled, autoFocu
 }
 
 /**
- * The one way into every private space. It never says how many there are or whether there
- * are any: a password either opens something or it does not, and typing it a second time
- * creates a space under it.
+ * Opens the space a password leads to. It never says how many spaces there are or whether
+ * there are any, and offers nothing else: a password opens something or it does not.
  */
 function UnlockDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  /** The password that just led nowhere, which is what a new space may be created under */
-  const [missing, setMissing] = useState<string | null>(null)
 
   useEffect(() => {
     if (open) return
-    setPassword(''); setError(''); setMissing(null); setBusy(false)
+    setPassword(''); setError(''); setBusy(false)
   }, [open])
 
   const submit = async () => {
@@ -68,40 +65,35 @@ function UnlockDialog({ open, onClose }: { open: boolean; onClose: () => void })
     setBusy(true)
     setError('')
     try {
-      if (missing !== null && password === missing) await privateSpace.create(password)
-      else if (!(await privateSpace.unlock(password))) {
-        setMissing(password)
+      // Opening a space starts the interface over, which takes this dialog with it
+      if (!(await privateSpace.unlock(password))) {
+        setError('没有用这个密码加密的隐私空间')
         setPassword('')
       }
-      // Opening a space starts the interface over, which takes this dialog with it
     } catch (failure) {
       setError(messageOf(failure))
     } finally {
       setBusy(false)
     }
   }
-  const canCreate = missing !== null && [...missing].length >= MIN_PASSWORD_LENGTH
 
   return (
     <Dialog open={open} onClose={() => { if (!busy) onClose() }} closeDisabled={busy} title="隐私空间" width="max-w-sm">
-      <p className="mb-3 text-sm leading-relaxed text-muted">
-        {missing === null ? '输入密码，打开它对应的隐私空间。' : canCreate ? '没有用这个密码加密的隐私空间。要用它新建一个，请再输入一次。' : `没有用这个密码加密的隐私空间。新建时密码至少需要 ${MIN_PASSWORD_LENGTH} 个字符。`}
-      </p>
-      <SecretInput value={password} onChange={(value) => { setPassword(value); setError('') }} onEnter={submit} placeholder={missing !== null && canCreate ? '再次输入密码' : '密码'} label="隐私空间密码" disabled={busy} autoFocus />
-      {missing !== null && canCreate && <p className="mt-2 text-xs leading-relaxed text-faint">密码无法找回：一旦忘记，里面的内容就再也打不开。</p>}
+      <SecretInput value={password} onChange={(value) => { setPassword(value); setError('') }} onEnter={submit} placeholder="密码" label="隐私空间密码" disabled={busy} autoFocus />
       {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
       <div className="mt-5 flex justify-end gap-2">
         <button type="button" className="btn btn-soft" disabled={busy} onClick={onClose}>取消</button>
         <button type="button" className="btn btn-primary" disabled={busy || !password} onClick={submit}>
           {busy && <LoaderCircle size={15} className="animate-spin" />}
-          {missing !== null && password === missing ? '新建' : '打开'}
+          打开
         </button>
       </div>
     </Dialog>
   )
 }
 
-function PasswordDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+/** Asks for a new password twice: for a space to create, or for the open one to move to */
+function PasswordDialog({ open, onClose, creating }: { open: boolean; onClose: () => void; creating: boolean }) {
   const { toast } = useUi()
   const [password, setPassword] = useState('')
   const [repeat, setRepeat] = useState('')
@@ -118,9 +110,12 @@ function PasswordDialog({ open, onClose }: { open: boolean; onClose: () => void 
     setBusy(true)
     setError('')
     try {
-      await privateSpace.changePassword(password)
-      toast('密码已修改，旧密码不再能打开这个空间')
-      onClose()
+      if (creating) await privateSpace.create(password)
+      else {
+        await privateSpace.changePassword(password)
+        toast('密码已修改，旧密码不再能打开这个空间')
+        onClose()
+      }
     } catch (failure) {
       setError(messageOf(failure))
     } finally {
@@ -128,10 +123,10 @@ function PasswordDialog({ open, onClose }: { open: boolean; onClose: () => void 
     }
   }
   return (
-    <Dialog open={open} onClose={() => { if (!busy) onClose() }} closeDisabled={busy} title="修改隐私空间密码" width="max-w-sm">
+    <Dialog open={open} onClose={() => { if (!busy) onClose() }} closeDisabled={busy} title={creating ? '新建隐私空间' : '修改隐私空间密码'} width="max-w-sm">
       <div className="flex flex-col gap-3">
-        <SecretInput value={password} onChange={(value) => { setPassword(value); setError('') }} onEnter={submit} placeholder={`新密码，至少 ${MIN_PASSWORD_LENGTH} 个字符`} label="新密码" disabled={busy} autoFocus />
-        <SecretInput value={repeat} onChange={(value) => { setRepeat(value); setError('') }} onEnter={submit} placeholder="再次输入新密码" label="再次输入新密码" disabled={busy} />
+        <SecretInput value={password} onChange={(value) => { setPassword(value); setError('') }} onEnter={submit} placeholder={`${creating ? '密码' : '新密码'}，至少 ${MIN_PASSWORD_LENGTH} 个字符`} label={creating ? '隐私空间密码' : '新密码'} disabled={busy} autoFocus />
+        <SecretInput value={repeat} onChange={(value) => { setRepeat(value); setError('') }} onEnter={submit} placeholder="再次输入密码" label="再次输入密码" disabled={busy} />
       </div>
       {mismatch && <p className="mt-2 text-sm text-danger">两次输入的密码不一致</p>}
       {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
@@ -140,7 +135,7 @@ function PasswordDialog({ open, onClose }: { open: boolean; onClose: () => void 
         <button type="button" className="btn btn-soft" disabled={busy} onClick={onClose}>取消</button>
         <button type="button" className="btn btn-primary" disabled={busy || !ready} onClick={submit}>
           {busy && <LoaderCircle size={15} className="animate-spin" />}
-          修改密码
+          {creating ? '新建' : '修改密码'}
         </button>
       </div>
     </Dialog>
@@ -222,7 +217,7 @@ export function PrivateSpaceDialogs({ action, onClose }: { action: PrivateAction
   return (
     <>
       <UnlockDialog open={action === 'unlock'} onClose={onClose} />
-      <PasswordDialog open={action === 'password'} onClose={onClose} />
+      <PasswordDialog open={action === 'create' || action === 'password'} creating={action !== 'password'} onClose={onClose} />
       <IncognitoLinks />
     </>
   )
@@ -238,19 +233,13 @@ export function useDestroyPrivateSpace() {
   }
 }
 
-/** The lock in the top bar: the way in while nothing is open, and the way out while a space is */
+/** Shown in the top bar only while a space is open: the way out, and what can be done with the space */
 export function PrivateSpaceButton({ onAction, className = '' }: { onAction: (action: PrivateAction) => void; className?: string }) {
   const active = usePrivateActive()
   const menu = usePopover<HTMLDivElement>()
   const destroy = useDestroyPrivateSpace()
   const item = 'flex w-full items-center gap-2.5 rounded-control px-2.5 py-2 text-left text-sm transition hover:bg-fg/6 focus-visible:bg-fg/6'
-  if (!active) {
-    return (
-      <button className={`icon-btn ${className}`} title="隐私空间（Alt+P）" aria-label="隐私空间" onClick={() => onAction('unlock')}>
-        <Lock size={16} />
-      </button>
-    )
-  }
+  if (!active) return null
   return (
     <div ref={menu.ref} className={`relative shrink-0 ${className}`}>
       <button
