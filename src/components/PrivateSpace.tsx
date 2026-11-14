@@ -1,4 +1,4 @@
-import { Copy, EyeOff, KeyRound, LoaderCircle, LockOpen, Trash2 } from 'lucide-react'
+import { Copy, EyeOff, KeyRound, LoaderCircle, Lock, LockOpen, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
 import { MIN_PASSWORD_LENGTH } from '../../shared/vault'
 import { INCOGNITO_UNAVAILABLE, openInIncognito } from '../private/open'
@@ -270,5 +270,45 @@ export function PrivateSpaceButton({ onAction, className = '' }: { onAction: (ac
         </div>
       )}
     </div>
+  )
+}
+
+const LONG_PRESS_MS = 600
+
+/**
+ * The way in where there is no keyboard: a faint mark at the very end of the page, on touch
+ * and narrow screens only. A tap asks for a password, holding it creates a space. It carries
+ * no words, so the page still does not say what it is for.
+ */
+export function PrivateSpaceFootEntry({ onAction }: { onAction: (action: PrivateAction) => void }) {
+  const active = usePrivateActive()
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const held = useRef(false)
+  useEffect(() => () => clearTimeout(timer.current), [])
+  if (active) return null
+  const release = () => clearTimeout(timer.current)
+  return (
+    <footer className="-mt-14 hidden justify-center pb-5 max-md:flex pointer-coarse:flex">
+      <button
+        type="button"
+        aria-label="入口"
+        className="grid size-9 touch-manipulation place-items-center rounded-full text-faint/40 outline-none select-none [-webkit-touch-callout:none] focus-visible:ring-2 focus-visible:ring-accent/50 active:text-faint"
+        onPointerDown={() => {
+          held.current = false
+          release()
+          // Felt rather than seen; the dialog waits for the finger to lift, or lifting it would dismiss it
+          timer.current = setTimeout(() => { held.current = true; navigator.vibrate?.(15) }, LONG_PRESS_MS)
+        }}
+        onPointerUp={() => { release(); if (held.current) onAction('create') }}
+        onPointerLeave={release}
+        onPointerCancel={() => { release(); held.current = false }}
+        // After a hold the browser would still deliver the mouse events of the touch, late and onto the dialog
+        onTouchEnd={(event) => { if (held.current && event.cancelable) event.preventDefault() }}
+        onContextMenu={(event) => event.preventDefault()}
+        onClick={() => { if (!held.current) onAction('unlock') }}
+      >
+        <Lock size={13} aria-hidden />
+      </button>
+    </footer>
   )
 }

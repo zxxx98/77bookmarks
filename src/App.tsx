@@ -15,7 +15,7 @@ import { recordClick } from './clicks'
 import { AddBookmarkDialog } from './components/AddBookmarkDialog'
 import { BoardView } from './components/BoardView'
 import { CreateGroupDialog } from './components/CreateGroupDialog'
-import { PrivateSpaceDialogs, type PrivateAction } from './components/PrivateSpace'
+import { PrivateSpaceDialogs, PrivateSpaceFootEntry, type PrivateAction } from './components/PrivateSpace'
 import { privateSpace } from './private/session'
 import { EditSiteDialog } from './components/EditSiteDialog'
 import { SettingsDialog } from './components/SettingsDialog'
@@ -416,7 +416,7 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
         todoCount={todos.todos?.filter((todo) => todo.doneAt === null).length}
         onToggleTodos={() => showTodos(!todoOpen)}
       />
-      <main className="mx-auto flex max-w-7xl flex-col gap-9 overflow-x-clip px-4 pt-8 pb-24 sm:px-6 lg:flex-row lg:items-start lg:gap-6">
+      <main className="mx-auto flex min-h-[calc(100dvh-4rem)] max-w-7xl flex-col gap-9 overflow-x-clip px-4 pt-8 pb-24 sm:px-6 lg:flex-row lg:items-start lg:gap-6">
         {/* Takes the place of the last column of groups on wide screens and stays put while they scroll.
             On narrow ones it sits above the bookmarks, where folding leaves only its title. */}
         <aside className={`relative z-10 lg:sticky lg:top-22 lg:order-last lg:w-[290px] lg:shrink-0 ${todoOpen ? '' : 'lg:hidden'}`}>
@@ -517,6 +517,7 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBo
         </motion.div>
         </div>
       </main>
+      <PrivateSpaceFootEntry onAction={setPrivateAction} />
       <PrivateSpaceDialogs action={privateAction} onClose={() => setPrivateAction(null)} />
       <AddBookmarkDialog open={addingUrl !== null} initialUrl={addingUrl ?? ''} onClose={() => setAddingUrl(null)} desktop={desktop} />
       {creatingGroup && <CreateGroupDialog desktop={creatingGroup} onClose={() => setCreatingGroup(null)} onCreated={() => { setQuery(''); setCreatingGroup(null) }} />}

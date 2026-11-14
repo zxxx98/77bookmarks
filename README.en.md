@@ -135,7 +135,7 @@ Browsing history is never read. Cloud sync is disabled by default and makes no n
 
 ## Private Spaces
 
-Nothing in the interface leads to the private spaces; they are reached by shortcut only: `Alt+P` asks for a password and opens the space it belongs to, `Alt+Shift+P` creates a space (at least 8 characters). They cannot be opened on a device without a keyboard. Each space is a board of its own, with its own desktops, groups, bookmarks and to-dos.
+Nothing in the interface leads to the private spaces; they are reached by shortcut only: `Alt+P` asks for a password and opens the space it belongs to, `Alt+Shift+P` creates a space (at least 8 characters). On phones and touch screens a faint lock mark sits at the very bottom of the page: tap it to enter a password, hold it to create a space. Each space is a board of its own, with its own desktops, groups, bookmarks and to-dos.
 
 - **Several spaces, invisible to each other**: different passwords open different spaces. Neither the interface nor the storage has a list of spaces, so knowing one password does not reveal whether there are others.
 - **Ciphertext only**: contents are encrypted in the page (scrypt + XChaCha20-Poly1305) before they are stored. The browser's local database, the self-hosted server's database, cloud sync and full backups only ever hold a bag of equally sized encrypted records, mixed with random ones from the first start, so nothing shows how many spaces there are, or whether there are any.
