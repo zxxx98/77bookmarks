@@ -6,6 +6,7 @@ import { platform } from '../platform'
 import { privateSpace } from '../private/session'
 import { LogoutContext } from '../session'
 import { readSettings } from '../settings'
+import { snapshot } from '../snapshot'
 import { LoginPage } from './LoginPage'
 
 type State = { status: 'checking' } | { status: 'error'; message: string } | { status: 'out'; siteName: string } | { status: 'in' }
@@ -14,28 +15,33 @@ type State = { status: 'checking' } | { status: 'error'; message: string } | { s
 export function SessionGate({ children }: { children: ReactNode }) {
   const session = platform.session
   const queryClient = useQueryClient()
-  const [state, setState] = useState<State>(session ? { status: 'checking' } : { status: 'in' })
+  // With pages kept from the last visit there is something to show before the server answers.
+  // They were shown to whoever was signed in here; the check below takes them away if that ended.
+  const [state, setState] = useState<State>(!session || snapshot.exists() ? { status: 'in' } : { status: 'checking' })
+
+  const signedOut = useCallback((siteName?: string) => {
+    // Nothing of the previous session may be shown to whoever signs in next
+    privateSpace.lock()
+    snapshot.clear()
+    queryClient.clear()
+    setState({ status: 'out', siteName: siteName || readSettings().siteName || DEFAULT_SITE_NAME })
+  }, [queryClient])
+  useEffect(() => session?.onExpired(() => signedOut()), [session, signedOut])
 
   const check = useCallback(() => {
     if (!session) return
-    setState({ status: 'checking' })
+    const shown = snapshot.exists()
+    if (!shown) setState({ status: 'checking' })
     session.status().then(
-      ({ authenticated, siteName }) => setState(authenticated ? { status: 'in' } : { status: 'out', siteName }),
-      (error) => setState({ status: 'error', message: error instanceof Error ? error.message : '无法连接服务器' }),
+      ({ authenticated, siteName }) => { if (!authenticated) signedOut(siteName); else setState({ status: 'in' }) },
+      // The kept pages stay up when the server can't be reached; the board says so itself
+      (error) => { if (!shown) setState({ status: 'error', message: error instanceof Error ? error.message : '无法连接服务器' }) },
     )
-  }, [session])
+  }, [session, signedOut])
   useEffect(check, [check])
 
-  const signedOut = useCallback(() => {
-    // Nothing of the previous session may be shown to whoever signs in next
-    privateSpace.lock()
-    queryClient.clear()
-    setState({ status: 'out', siteName: readSettings().siteName || DEFAULT_SITE_NAME })
-  }, [queryClient])
-  useEffect(() => session?.onExpired(signedOut), [session, signedOut])
-
   const logout = useCallback(() => {
-    void session?.logout().catch(() => undefined).then(signedOut)
+    void session?.logout().catch(() => undefined).then(() => signedOut())
   }, [session, signedOut])
 
   if (state.status === 'in') return <LogoutContext.Provider value={session ? logout : undefined}>{children}</LogoutContext.Provider>

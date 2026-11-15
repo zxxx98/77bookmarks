@@ -26,6 +26,7 @@ import { SEARCH_ENGINES, SearchEngineIcon, useSearchEngine } from './engines'
 import { useLazyIcons } from './lazy-icons'
 import { searchBoard } from './search'
 import { readSettings } from './settings'
+import { snapshot } from './snapshot'
 import { useTodos } from './todos'
 import { navigateToUrl, UiProvider, useUi } from './ui'
 
@@ -57,6 +58,9 @@ export default function App() {
     queryFn: () => api.board(desktopId),
     retry: false,
     placeholderData: keepPreviousData,
+    // What this browser showed last time, until the answer arrives; it counts as outdated from the start
+    initialData: () => (isPrivate ? undefined : snapshot.board(desktopId)),
+    initialDataUpdatedAt: 0,
   })
   const settings = useQuery({ queryKey: ['settings'], queryFn: api.settings, placeholderData: readSettings })
   const systemSettings = settings.data ?? readSettings()
@@ -85,11 +89,14 @@ export default function App() {
     previousPage.current = board.data
     const resolvedId = board.data.desktop.id
     if (!isPrivate) preferences.setItem(DESKTOP_KEY, String(resolvedId))
+    // Only what the store answered is worth keeping, not the snapshot itself
+    if (!isPrivate && board.dataUpdatedAt > 0) snapshot.saveBoard(board.data)
     if (desktopId !== resolvedId) {
-      queryClient.setQueryData(['board', resolvedId], board.data)
+      // A page that came from the snapshot stays outdated under its real id too
+      queryClient.setQueryData(['board', resolvedId], board.data, { updatedAt: board.dataUpdatedAt })
       setDesktopId(resolvedId)
     }
-  }, [board.data, board.isPlaceholderData, desktopId, queryClient, isPrivate])
+  }, [board.data, board.dataUpdatedAt, board.isPlaceholderData, desktopId, queryClient, isPrivate])
 
   const page = board.data ?? previousPage.current
   if (page) return (
@@ -100,6 +107,7 @@ export default function App() {
         onSelectDesktop={setDesktopId}
         loading={board.isPlaceholderData || !board.data}
         loadError={!board.data ? board.error?.message : undefined}
+        staleError={board.data && !board.isPlaceholderData && board.isError ? board.error?.message : undefined}
         onRetryBoard={() => { void board.refetch() }}
         settingsReady={settings.isSuccess && !settings.isPlaceholderData}
         settingsError={settings.isError}
@@ -134,6 +142,8 @@ interface HomeProps {
   onSelectDesktop: (id: number) => void
   loading: boolean
   loadError?: string
+  /** The page shown could not be refreshed; it is what was loaded before */
+  staleError?: string
   onRetryBoard: () => void
   settingsReady: boolean
   settingsError: boolean
@@ -143,10 +153,13 @@ interface HomeProps {
   isPrivate: boolean
 }
 
-function Home({ board, desktopId, onSelectDesktop, loading, loadError, onRetryBoard, settingsReady, settingsError, onRetrySettings, settings, isPrivate }: HomeProps) {
+function Home({ board, desktopId, onSelectDesktop, loading, loadError, staleError, onRetryBoard, settingsReady, settingsError, onRetrySettings, settings, isPrivate }: HomeProps) {
   const { siteName, openInNewTab, layoutColumns, defaultIntranet = true } = settings
   const queryClient = useQueryClient()
   const { toast, openBookmark } = useUi()
+  useEffect(() => {
+    if (staleError) toast(`暂时显示上次的内容：${staleError}`, 'error')
+  }, [staleError, toast])
   const [engine] = useSearchEngine()
   const [query, setQuery] = useState('')
   const [editing, setEditing] = useState(false)

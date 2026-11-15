@@ -1,10 +1,11 @@
 import { createReadStream } from 'node:fs'
-import { mkdir, stat } from 'node:fs/promises'
+import { mkdir, readdir, readFile, stat } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import { basename, dirname, extname, join, normalize, resolve, sep } from 'node:path'
 import { Readable } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { createApp } from './app'
+import { compress, compressible, MIN_COMPRESS_BYTES, pickEncoding, type Encoding } from './compress'
 import { openSqliteStore } from './sqlite'
 
 /** Full backups carry every stored icon, so requests may be far larger than a bookmark */
@@ -69,8 +70,23 @@ async function api(request: IncomingMessage, response: ServerResponse) {
     new Request(`http://${request.headers.host ?? 'localhost'}${request.url}`, { method: request.method, headers, body: payload?.length ? new Uint8Array(payload) : undefined }),
     { client: forwarded('x-forwarded-for') || request.socket.remoteAddress || 'unknown', secure },
   )
-  response.writeHead(result.status, { ...Object.fromEntries(result.headers), ...SECURITY })
-  if (!result.body) { response.end(); return }
+  const answer = { ...Object.fromEntries(result.headers), ...SECURITY } as Record<string, string | number>
+  if (!result.body) { response.writeHead(result.status, answer).end(); return }
+  const type = result.headers.get('content-type')
+  if (!/^text\/event-stream/i.test(type ?? '')) {
+    // Everything but the event stream is a complete answer, small enough to compress in one go
+    let bytes: Uint8Array = new Uint8Array(await result.arrayBuffer())
+    const encoding = compressible(type) && bytes.byteLength >= MIN_COMPRESS_BYTES ? pickEncoding(request.headers['accept-encoding'] as string | undefined) : null
+    if (encoding) {
+      bytes = await compress(bytes, encoding)
+      answer['content-encoding'] = encoding
+      answer.vary = 'Accept-Encoding'
+    }
+    answer['content-length'] = bytes.byteLength
+    response.writeHead(result.status, answer).end(bytes)
+    return
+  }
+  response.writeHead(result.status, answer)
   const stream = Readable.fromWeb(result.body as import('node:stream/web').ReadableStream)
   // A closed tab must release its event stream
   response.on('close', () => stream.destroy())
@@ -91,15 +107,53 @@ async function page(request: IncomingMessage, response: ServerResponse) {
   }
   const info = await stat(file).catch(() => null)
   if (!info) { response.writeHead(404, SECURITY).end('界面文件缺失'); return }
-  response.writeHead(200, {
-    'content-type': TYPES[extname(file)] ?? 'application/octet-stream',
-    'content-length': info.size,
+  const type = TYPES[extname(file)] ?? 'application/octet-stream'
+  const tag = tagOf(info)
+  const headers: Record<string, string | number> = {
+    'content-type': type,
     // Built assets carry a content hash in their name; the page itself must always be fresh
     'cache-control': file.includes(`${sep}assets${sep}`) ? 'public, max-age=31536000, immutable' : 'no-cache',
+    etag: tag,
     ...SECURITY,
-  })
+  }
+  const shrinks = compressible(type) && info.size >= MIN_COMPRESS_BYTES
+  if (shrinks) headers.vary = 'Accept-Encoding'
+  // An unchanged page costs a slow connection only the headers
+  if (request.headers['if-none-match'] === tag) { response.writeHead(304, headers).end(); return }
+  const encoding = shrinks ? pickEncoding(request.headers['accept-encoding'] as string | undefined) : null
+  if (encoding) {
+    const bytes = await compressed(file, tag, encoding)
+    response.writeHead(200, { ...headers, 'content-encoding': encoding, 'content-length': bytes.byteLength })
+    response.end(request.method === 'HEAD' ? undefined : bytes)
+    return
+  }
+  response.writeHead(200, { ...headers, 'content-length': info.size })
   if (request.method === 'HEAD') response.end()
   else createReadStream(file).pipe(response)
+}
+
+const tagOf = (info: { size: number; mtimeMs: number }) => `W/"${info.size.toString(36)}-${Math.floor(info.mtimeMs).toString(36)}"`
+/** Interface files are few and never change while running, so each is compressed once and kept */
+const variants = new Map<string, Promise<Buffer>>()
+function compressed(file: string, tag: string, encoding: Encoding): Promise<Buffer> {
+  const key = `${encoding} ${tag} ${file}`
+  let bytes = variants.get(key)
+  if (!bytes) {
+    bytes = readFile(file).then((content) => compress(content, encoding, true))
+    variants.set(key, bytes)
+    bytes.catch(() => variants.delete(key))
+  }
+  return bytes
+}
+/** Done ahead of the first visit, which would otherwise wait for the slowest compression */
+async function warm(directory: string) {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const file = join(directory, entry.name)
+    if (entry.isDirectory()) { await warm(file); continue }
+    const info = await stat(file)
+    if (!compressible(TYPES[extname(file)]) || info.size < MIN_COMPRESS_BYTES) continue
+    await Promise.all((['br', 'gzip'] as const).map((encoding) => compressed(file, tagOf(info), encoding)))
+  }
 }
 
 const server = createServer((request, response) => {
@@ -110,6 +164,7 @@ const server = createServer((request, response) => {
     response.end(JSON.stringify({ error: '服务器出错，请稍后重试' }))
   })
 })
+void warm(staticDir).catch(() => undefined)
 server.listen(port, '0.0.0.0', () => console.log(`77 Bookmarks 已启动：http://0.0.0.0:${port}（数据目录 ${dataDir}）`))
 
 function shutdown() {

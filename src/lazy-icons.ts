@@ -42,15 +42,14 @@ export function useLazyIcons(desktop: Desktop | undefined, enabled = true) {
       try {
         const result = await api.setIcon(siteId)
         if (cancelled) return
-        const stamp = Date.now()
         updateBoardCache(queryClient, (page) => {
           let modified = false
           const groups = page.desktop.groups.map((group) => {
             const sites = group.sites.map((s) => {
               if (s.id === siteId) {
                 modified = true
-                // An address of the site itself means no image is stored here
-                return { ...s, iconVersion: result.iconUrl ? 0 : stamp, iconUrl: result.iconUrl }
+                // The version the store gave it, so the picture's address is the same after the next refresh
+                return { ...s, iconVersion: result.iconVersion, iconUrl: result.iconUrl }
               }
               return s
             })

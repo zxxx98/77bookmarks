@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { applyTodoOp, type TodoOp } from '../shared/todos'
 import type { Todo } from '../shared/types'
 import { api } from './api'
+import { snapshot } from './snapshot'
 import { useUi } from './ui'
 
 /** A to-do the local store hasn't stored yet. It has no real id, so it can't be changed until it does */
@@ -103,7 +104,11 @@ export interface Todos {
 export function useTodos(): Todos {
   const queryClient = useQueryClient()
   const { toast } = useUi()
-  const query = useQuery({ queryKey: TODOS_KEY, queryFn: api.todos, retry: false })
+  // The list this browser showed last time stands in until the store answers
+  const query = useQuery({ queryKey: TODOS_KEY, queryFn: api.todos, retry: false, initialData: snapshot.todos, initialDataUpdatedAt: 0 })
+  useEffect(() => {
+    if (query.data && query.dataUpdatedAt > 0) snapshot.saveTodos(query.data)
+  }, [query.data, query.dataUpdatedAt])
   const { mutate } = useMutation({
     mutationKey: TODOS_KEY,
     scope: { id: 'todos' },

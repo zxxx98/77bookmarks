@@ -476,7 +476,7 @@ export class LocalService {
       // Only the custom address travels to other devices, so caching a picture here
       // leaves the modification time alone.
       await tx.objectStore('sites').put({ ...row, iconUrl: url, iconVersion, updatedAt: url === row.iconUrl ? row.updatedAt : Math.max(Date.now(), row.updatedAt + 1) })
-      return { ...ok, iconUrl: url }
+      return { ...ok, iconUrl: url, iconVersion }
     })
   }
   async removeIcon(id: number) {

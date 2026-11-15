@@ -53,6 +53,7 @@ export const selfhostPlatform: Platform = {
   async syncCall(method, ...args) {
     return (await request<{ value: never }>('/sync', 'POST', { method, args })).value
   },
+  iconSrc: (siteId, version) => `/api/icon/${siteId}?v=${version}`,
   onDataChanged(listener) {
     window.addEventListener(CHANGED, listener)
     if (listeners++ === 0) {

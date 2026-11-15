@@ -17,6 +17,11 @@ export interface Platform {
   syncCall<K extends SyncMethod>(method: K, ...args: unknown[]): Promise<SyncResults[K]>
   /** Calls back whenever the data changed somewhere else: another tab, device or the clipper */
   onDataChanged(listener: () => void): () => void
+  /**
+   * Address a stored icon can be loaded from as a picture, which lets the browser cache it.
+   * Absent where icons are read from the local store.
+   */
+  iconSrc?(siteId: number, version: number): string
   /** Keeps appearance preferences somewhere more durable than localStorage, where there is such a place */
   preferences: {
     hydrate(): Promise<void>

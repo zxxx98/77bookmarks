@@ -185,6 +185,28 @@ describe('the right-click extension', () => {
   })
 })
 
+describe('icons as pictures', () => {
+  it('serves a stored icon for the browser to keep, to a signed-in page only', async () => {
+    const { cookie } = await login()
+    const { value } = await rpc({ cookie }, 'addBookmark', 'https://example.com', 0)
+    const set = await rpc({ cookie }, 'setIcon', value.siteId)
+    const shown = (await rpc({ cookie }, 'board')).value.desktop.groups[0].sites[0]
+    // The page builds the picture's address from this before it reloads the board
+    expect(set.value.iconVersion).toBe(shown.iconVersion)
+
+    expect((await send(`/api/icon/${value.siteId}?v=${shown.iconVersion}`)).status).toBe(401)
+    const response = await send(`/api/icon/${value.siteId}?v=${shown.iconVersion}`, { headers: { cookie } })
+    expect(response.status).toBe(200)
+    expect(response.headers.get('content-type')).toBe('image/png')
+    expect(response.headers.get('cache-control')).toBe('private, max-age=31536000, immutable')
+    expect(response.headers.get('content-security-policy')).toContain('sandbox')
+    expect(Buffer.from(await response.arrayBuffer()).toString('base64')).toBe(ICON.split(',')[1])
+
+    expect((await send('/api/icon/999', { headers: { cookie } })).status).toBe(404)
+    expect((await send('/api/icon/abc', { headers: { cookie } })).status).toBe(404)
+  })
+})
+
 describe('icon discovery', () => {
   it('reads declared icons in order of usefulness and ignores other links', () => {
     const html = `<head><link rel="stylesheet" href="/a.css"><link rel="apple-touch-icon" href="/touch.png">

@@ -11,6 +11,7 @@ import { SyncSettings } from './SyncSettings'
 import { ClipperSettings } from './ClipperSettings'
 import { UpdateSettings } from './UpdateSettings'
 import { platform } from '../platform'
+import { snapshot } from '../snapshot'
 
 type SettingsTab = 'general' | 'layout' | 'backup' | 'sync' | 'clipper' | 'update'
 
@@ -85,6 +86,7 @@ function Content({
   const [layoutColumns, setLayoutColumns] = useState(settings.layoutColumns)
   const [autoSortByUsage, setAutoSortByUsage] = useState(settings.autoSortByUsage)
   const [defaultIntranet, setDefaultIntranet] = useState(settings.defaultIntranet !== false)
+  const [keepSnapshot, setKeepSnapshot] = useState(snapshot.enabled)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -206,6 +208,24 @@ function Content({
             默认跳转内网
           </label>
           <p id="default-intranet-hint" className="mt-1.5 text-xs text-faint">点击配置了内网地址的书签时自动探测内网是否可达，可达则跳转内网，不可达则跳转外网；取消勾选后点击时将弹出内外网选择面板。</p>
+          {snapshot.supported && <>
+            <label className="mt-5 flex cursor-pointer items-center gap-2.5 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 shrink-0 accent-accent-solid"
+                checked={keepSnapshot}
+                onChange={(event) => {
+                  // Belongs to this browser and takes effect at once, apart from the settings saved on the server
+                  snapshot.setEnabled(event.target.checked)
+                  setKeepSnapshot(event.target.checked)
+                  if (event.target.checked) void queryClient.invalidateQueries({ queryKey: ['board'] })
+                }}
+                aria-describedby="keep-snapshot-hint"
+              />
+              在此浏览器保留上次的内容
+            </label>
+            <p id="keep-snapshot-hint" className="mt-1.5 text-xs text-faint">打开页面时先显示上次看到的书签和待办，再从服务器更新，网络慢时不必等待。内容保存在此浏览器中，退出登录时清除；在公用电脑上建议关闭。隐私空间的内容不会保留。</p>
+          </>}
           {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
           <div className="mt-5 flex justify-end">
             <button className="btn btn-primary" disabled={saving || !name.trim() || unchanged}>

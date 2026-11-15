@@ -126,6 +126,23 @@ export async function createApp({ store, password, fetchIcon = fetchSiteIcon, up
     }
   }
 
+  /**
+   * A stored icon as a picture of its own. The page asks for it with the icon's version in
+   * the address, so the browser keeps it and a card's icon is downloaded once, not per visit.
+   */
+  async function iconImage(id: number): Promise<Response> {
+    const match = /^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i.exec(await service.icon(id).catch(() => null) ?? '')
+    if (!match) return fail(404, '图标不存在')
+    return new Response(new Uint8Array(Buffer.from(match[2], 'base64')), {
+      headers: {
+        'content-type': match[1],
+        'cache-control': 'private, max-age=31536000, immutable',
+        // The picture came from another site: opened by itself, an SVG must not run as a page of this one
+        'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+      },
+    })
+  }
+
   /** Tells open pages that the data changed; a comment line keeps idle connections alive */
   function events(): Response {
     const encoder = new TextEncoder()
@@ -176,6 +193,8 @@ export async function createApp({ store, password, fetchIcon = fetchSiteIcon, up
     if (route === 'POST /api/logout') return json({ ok: true }, 200, { 'set-cookie': auth.clearCookie(secure) })
 
     if (!signedIn) return fail(401, '未登录')
+    const icon = /^GET \/api\/icon\/(\d{1,15})$/.exec(route)
+    if (icon) return iconImage(Number(icon[1]))
     switch (route) {
       case 'POST /api/rpc': return rpc(request, false)
       case 'POST /api/sync': return sync(request)
