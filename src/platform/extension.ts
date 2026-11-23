@@ -1,5 +1,6 @@
 import { fetchTitleHtml } from '../title-fetch'
-import { DATA_CHANGED, DATA_MESSAGE, SYNC_MESSAGE, TITLE_MESSAGE } from '../storage/messages'
+import { DATA_CHANGED, DATA_MESSAGE, NEWS_MESSAGE, SYNC_MESSAGE, TITLE_MESSAGE } from '../storage/messages'
+import type { NewsFeedResult } from '../../shared/news'
 import type { LocalService } from '../storage/service'
 import type { Platform } from './types'
 
@@ -84,6 +85,15 @@ export const extensionPlatform: Platform = {
     if (!granted) return requestPermission ? { status: 'ok', html: null } : { status: 'permission' }
     const response = await chrome.runtime.sendMessage({ type: TITLE_MESSAGE, url })
     return { status: 'ok', html: typeof response?.html === 'string' ? response.html : null }
+  },
+  async newsFeed(section) {
+    if (!isExtension()) {
+      const { fetchNewsFeed } = await import('../news-feed')
+      return { status: 'ok', items: await fetchNewsFeed(section.feedUrl) }
+    }
+    const response = await chrome.runtime.sendMessage({ type: NEWS_MESSAGE, sectionId: section.id }) as { value?: NewsFeedResult; error?: string } | undefined
+    if (!response?.value) throw new Error(response?.error ?? '无法读取快报订阅')
+    return response.value
   },
   // An extension may open incognito windows without being allowed to run inside them
   get incognito() {

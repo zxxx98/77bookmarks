@@ -101,11 +101,11 @@ export interface Todos {
  * changes are sent one at a time, in the order they were made, so that the local store ends up with
  * what is on screen even when they come in quick succession.
  */
-export function useTodos(): Todos {
+export function useTodos(enabled = true): Todos {
   const queryClient = useQueryClient()
   const { toast } = useUi()
   // The list this browser showed last time stands in until the store answers
-  const query = useQuery({ queryKey: TODOS_KEY, queryFn: api.todos, retry: false, initialData: snapshot.todos, initialDataUpdatedAt: 0 })
+  const query = useQuery({ queryKey: TODOS_KEY, queryFn: api.todos, enabled, retry: false, initialData: snapshot.todos, initialDataUpdatedAt: 0 })
   useEffect(() => {
     if (query.data && query.dataUpdatedAt > 0) snapshot.saveTodos(query.data)
   }, [query.data, query.dataUpdatedAt])

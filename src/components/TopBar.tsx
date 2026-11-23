@@ -63,7 +63,7 @@ interface Props {
   todoOpen: boolean
   /** Open to-dos, once the list has loaded */
   todoCount?: number
-  onToggleTodos: () => void
+  onToggleTodos?: () => void
 }
 
 export function TopBar({
@@ -175,8 +175,7 @@ export function TopBar({
             {allCollapsed ? <UnfoldVertical size={16} /> : <FoldVertical size={16} />}
           </button>
         )}
-        {/* Narrower screens fold the to-dos with the title above the bookmarks instead */}
-        <button
+        {onToggleTodos && <button
           className={`icon-btn relative max-lg:hidden ${todoOpen ? '!bg-accent-soft !text-accent' : ''}`}
           title={todoOpen ? '收起待办（Alt+T 添加待办）' : '展开待办（Alt+T 添加待办）'}
           aria-label={todoOpen ? '收起待办' : todoCount ? `展开待办，${todoCount} 项未完成` : '展开待办'}
@@ -189,7 +188,7 @@ export function TopBar({
               {todoCount > 99 ? '99+' : todoCount}
             </span>
           )}
-        </button>
+        </button>}
         {/* Only an open space shows itself, with its way out. The way in is a shortcut and nothing on screen. */}
         {privateActive && <PrivateSpaceButton onAction={onPrivate} />}
         <ThemeMenu theme={theme} onTheme={setTheme} styleId={styleId} activePreset={activePreset} onStyle={setStyleId} className="max-md:hidden" />

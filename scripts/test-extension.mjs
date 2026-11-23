@@ -12,6 +12,12 @@ const titleRequests = []
 const titleResponses = []
 // Deliberately omit CORS headers: the extension worker must use its granted host access.
 const titleServer = createServer((request, response) => {
+  if (request.url === '/news.xml') {
+    response.setHeader('Content-Type', 'application/rss+xml; charset=utf-8')
+    const items = Array.from({ length: 8 }, (_, index) => `<item><title>快报 ${index + 1}</title><link>https://news.example.com/${index + 1}</link></item>`)
+    response.end(`<rss version="2.0"><channel><title>测试订阅</title>${items.join('')}</channel></rss>`)
+    return
+  }
   titleRequests.push(request.url)
   if (request.url === '/slow') return
   response.setHeader('Content-Type', 'text/html; charset=utf-8')
@@ -229,6 +235,37 @@ try {
   await expect(usageCards(page).first()).toHaveAttribute('href', 'https://usage-b.example.com')
   await rpc(page, 'deleteGroup', usageGroup.id)
   console.log('✓ Usage sorting setting, link counts, cross-tab updates and retained order after disabling and reload')
+
+  await context.setOffline(false)
+  const news = page.getByRole('region', { name: '快报', exact: true })
+  await expect(news).toHaveCount(0)
+  const savedSettings = await rpc(page, 'settings')
+  await rpc(page, 'updateSettings', { ...savedSettings, newsFeedUrl: `${titleOrigin}/news.xml` })
+  const todosRegion = page.getByRole('region', { name: '待办', exact: true })
+  const newsList = news.getByRole('region', { name: '快报列表', exact: true })
+  await expect(newsList.getByRole('listitem')).toHaveCount(8)
+  expect((await news.boundingBox()).y).toBeGreaterThan((await todosRegion.boundingBox()).y)
+  expect(await newsList.evaluate((list) => {
+    const bottom = list.getBoundingClientRect().bottom
+    return Array.from(list.querySelectorAll('li')).filter((row) => row.getBoundingClientRect().bottom <= bottom).length
+  })).toBe(6)
+  await newsList.evaluate((list) => { list.scrollTop = list.scrollHeight })
+  await expect(news.getByRole('link', { name: /快报 8/ })).toBeInViewport()
+  await news.getByRole('button', { name: '快报', exact: true }).click()
+  await expect(newsList).toHaveCount(0)
+  await expect(todosRegion).toBeVisible()
+  await news.getByRole('button', { name: '快报', exact: true }).click()
+  await page.setViewportSize({ width: 390, height: 844 })
+  await expect(todosRegion).toHaveCount(0)
+  await expect(news).toHaveCount(0)
+  await page.keyboard.press('Alt+t')
+  await expect(todosRegion).toHaveCount(0)
+  await page.setViewportSize(options.viewport)
+  await expect(newsList.getByRole('listitem')).toHaveCount(8)
+  await rpc(page, 'updateSettings', { ...savedSettings, newsFeedUrl: '' })
+  await expect(news).toHaveCount(0)
+  await context.setOffline(true)
+  console.log('✓ News under to-dos, six visible rows, internal scrolling, folding and phone layout')
 
   await page.getByRole('button', { name: '更多', exact: true }).click()
   await page.getByRole('button', { name: '系统设置', exact: true }).click()

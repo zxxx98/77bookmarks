@@ -1,12 +1,15 @@
 import { LocalService, READ_METHODS, SERVICE_METHODS, type ServiceMethod } from '../src/storage/service'
-import { DATA_CHANGED, DATA_MESSAGE, SYNC_MESSAGE, TITLE_MESSAGE } from '../src/storage/messages'
+import { DATA_CHANGED, DATA_MESSAGE, NEWS_MESSAGE, SYNC_MESSAGE, TITLE_MESSAGE } from '../src/storage/messages'
 import { SYNC_METHODS, runSyncMethod } from '../src/sync/control'
 import { fetchTitleHtml } from '../src/title-fetch'
+import { createNewsFeedReader } from '../src/news-feed'
+import { newsSectionsOf, type NewsFeedResult } from '../shared/news'
 import { parseBookmarkUrl } from '../shared/url'
 import { attachContextMenuHandler, registerContextMenus, reportAddResult } from './context-menu'
 import { describeResult, isBookmarkable } from './lib'
 
 const service = new LocalService()
+const readNewsFeed = createNewsFeedReader()
 
 /** Fires once, half a minute after the last local change, to upload it */
 const SYNC_SOON = '77bookmarks:sync-soon'
@@ -21,6 +24,19 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   void chrome.permissions.contains({ origins: [`${parsed.origin}/*`] }).then(
     (granted) => granted ? fetchTitleHtml(message.url) : null,
   ).then((html) => respond({ html }), () => respond({ html: null }))
+  return true
+})
+
+chrome.runtime.onMessage.addListener((message, sender, respond) => {
+  if (sender.id !== chrome.runtime.id || message?.type !== NEWS_MESSAGE) return
+  const read = async (): Promise<NewsFeedResult> => {
+    const section = newsSectionsOf(await service.settings()).find(({ id }) => id === message.sectionId)
+    if (!section) throw new Error('这个快报板块尚未配置')
+    const granted = await chrome.permissions.contains({ origins: [`${new URL(section.feedUrl).origin}/*`] })
+    if (!granted) return { status: 'permission' }
+    return { status: 'ok', items: await readNewsFeed(section.feedUrl) }
+  }
+  void read().then((value) => respond({ value }), () => respond({ error: '无法读取快报订阅' }))
   return true
 })
 

@@ -1,4 +1,5 @@
 import type { AccessTokenStatus, UpdateStatus, UpdateTriggerResult } from '../../shared/types'
+import type { NewsFeedResult } from '../../shared/news'
 import type { Platform } from './types'
 
 const EXPIRED = '77bookmarks:session-expired'
@@ -75,6 +76,7 @@ export const selfhostPlatform: Platform = {
     // The server reads the page: no browser permission is involved and no CORS applies
     return { status: 'ok', html: (await request<{ html: string | null }>('/page-title', 'POST', { url })).html }
   },
+  newsFeed: (section) => request<NewsFeedResult>(`/news-feed?section=${encodeURIComponent(section.id)}`),
   incognito: {
     // A page has no way to open an incognito window; the right-click extension does, and
     // announces itself on the pages of the server it is connected to

@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { DEFAULT_SETTINGS } from '../shared/settings'
 import { createApp } from './app'
 import { iconLinks, rememberMisses } from './icons'
 import { openSqliteStore, type SqliteStore } from './sqlite'
@@ -19,7 +20,7 @@ beforeEach(async () => {
   fetchIcon = vi.fn(async () => ICON)
   app = await createApp({ store, password: PASSWORD, fetchIcon })
 })
-afterEach(() => { app.close(); store.destroy() })
+afterEach(() => { app.close(); store.destroy(); vi.unstubAllGlobals() })
 
 const send = (path: string, init: { method?: string; body?: unknown; headers?: Record<string, string> } = {}, client = 'tester') =>
   app.handle(new Request(`http://bookmarks.test${path}`, {
@@ -80,6 +81,22 @@ describe('signing in', () => {
 })
 
 describe('data requests', () => {
+  it('loads just the saved news feed for signed-in pages and shares the fetch', async () => {
+    const fetchFeed = vi.fn(async () => new Response('<rss version="2.0"><channel><title>示例报</title><item><title>最新快报</title><link>/story</link></item></channel></rss>'))
+    vi.stubGlobal('fetch', fetchFeed)
+    const { cookie } = await login()
+    const news = '/api/news-feed?section=news'
+    expect((await send(news)).status).toBe(401)
+    expect((await send(news, { headers: { cookie } })).status).toBe(404)
+    const feedUrl = 'https://feeds.example/real'
+    await rpc({ cookie }, 'updateSettings', { ...DEFAULT_SETTINGS, newsFeedUrl: feedUrl })
+    expect((await send('/api/news-feed?section=other', { headers: { cookie } })).status).toBe(404)
+    const responses = await Promise.all([news, `${news}&url=https://another.example/feed`].map((path) => send(path, { headers: { cookie } })))
+    for (const response of responses) {
+      expect(await response.json()).toMatchObject({ status: 'ok', items: [{ title: '最新快报', url: 'https://feeds.example/story' }] })
+    }
+    expect(fetchFeed).toHaveBeenCalledExactlyOnceWith(feedUrl, expect.objectContaining({ credentials: 'omit' }))
+  })
   it('runs the shared data service and reports its validation errors', async () => {
     const { cookie } = await login()
     const added = await rpc({ cookie }, 'addBookmark', 'https://example.com/docs', 0, null, '文档')

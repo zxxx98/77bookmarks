@@ -198,7 +198,7 @@ function Content({
             aria-invalid={feedInvalid}
             aria-describedby={feedInvalid ? 'news-feed-url-hint news-feed-url-error' : 'news-feed-url-hint'}
           />
-          <p id="news-feed-url-hint" className="mt-2 text-xs text-faint">填写一个 RSS 或 Atom 订阅地址。留空后保存可清除。</p>
+          <p id="news-feed-url-hint" className="mt-2 text-xs text-faint">填写 RSS、Atom 或 JSON Feed 地址，内容会显示在桌面端的待办下方。留空后保存可清除。</p>
           {feedInvalid && <p id="news-feed-url-error" role="alert" className="mt-1.5 text-sm text-danger">请输入有效的 HTTP 或 HTTPS 快报订阅地址。</p>}
           <label className="mt-5 flex cursor-pointer items-center gap-2.5 text-sm">
             <input

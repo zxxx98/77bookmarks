@@ -2,7 +2,8 @@ import { preferences } from './preferences'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowUpRight, BookmarkPlus, LoaderCircle, SearchX } from 'lucide-react'
 import { motion } from 'motion/react'
-import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type TouchEvent } from 'react'
+import { newsSectionsOf } from '../shared/news'
 import type { SystemSettings } from '../shared/settings'
 import type { BoardPage, View } from '../shared/types'
 import { DEFAULT_GROUP_NAME } from '../shared/sync'
@@ -18,6 +19,7 @@ import { CreateGroupDialog } from './components/CreateGroupDialog'
 import { PrivateSpaceDialogs, PrivateSpaceFootEntry, type PrivateAction } from './components/PrivateSpace'
 import { privateSpace } from './private/session'
 import { EditSiteDialog } from './components/EditSiteDialog'
+import { NewsPanel } from './components/NewsPanel'
 import { SettingsDialog } from './components/SettingsDialog'
 import { TodoPanel } from './components/TodoPanel'
 import { TopBar } from './components/TopBar'
@@ -34,6 +36,15 @@ const DESKTOP_KEY = 'desktop'
 const SWIPE_DISTANCE = 70
 const TODO_PANEL_KEY = 'todo-panel'
 const PANEL_BESIDE = '(min-width: 1024px)'
+const sidebarMedia = typeof matchMedia === 'function'
+  ? matchMedia('(min-width: 768px) and (pointer: fine), (min-width: 768px) and (min-height: 501px)')
+  : null
+
+function onSidebarChange(listener: () => void) {
+  sidebarMedia?.addEventListener('change', listener)
+  return () => sidebarMedia?.removeEventListener('change', listener)
+}
+const sidebarFits = () => sidebarMedia?.matches ?? true
 
 /** Until the user folds or unfolds it: open where it fits beside the bookmarks, folded where it would push them down */
 function storedTodoOpen(): boolean {
@@ -169,7 +180,9 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, staleErro
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [usageOpen, setUsageOpen] = useState(false)
   const [privateAction, setPrivateAction] = useState<PrivateAction | null>(null)
-  const todos = useTodos()
+  const sidebarVisible = useSyncExternalStore(onSidebarChange, sidebarFits)
+  const todos = useTodos(sidebarVisible)
+  const newsSections = isPrivate ? [] : newsSectionsOf(settings)
   // Remembered per browser, like the desktop shown
   const [todoOpen, setTodoOpen] = useState(storedTodoOpen)
   const [todoFocus, setTodoFocus] = useState(0)
@@ -313,6 +326,7 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, staleErro
       }
 
       if (event.altKey && (event.key.toLowerCase() === 't' || event.code === 'KeyT')) {
+        if (!sidebarVisible) return
         event.preventDefault()
         showTodos(true)
         setTodoFocus((count) => count + 1)
@@ -360,7 +374,7 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, staleErro
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('paste', onPaste)
     }
-  }, [desktops.length, editing, stepDesktop, loading, toggleCollapseAll, showTodos, isPrivate])
+  }, [desktops.length, editing, stepDesktop, loading, toggleCollapseAll, showTodos, sidebarVisible, isPrivate])
 
   // A horizontal swipe switches desktops on touch screens. Off in edit mode, where touches drag cards
   const touchStart = useRef<{ x: number; y: number } | null>(null)
@@ -427,14 +441,15 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, staleErro
         onPrivate={setPrivateAction}
         todoOpen={todoOpen}
         todoCount={todos.todos?.filter((todo) => todo.doneAt === null).length}
-        onToggleTodos={() => showTodos(!todoOpen)}
+        onToggleTodos={sidebarVisible ? () => showTodos(!todoOpen) : undefined}
       />
       <main className="mx-auto flex min-h-[calc(100dvh-4rem)] max-w-7xl flex-col gap-9 overflow-x-clip px-4 pt-8 pb-24 sm:px-6 lg:flex-row lg:items-start lg:gap-6">
-        {/* Takes the place of the last column of groups on wide screens and stays put while they scroll.
-            On narrow ones it sits above the bookmarks, where folding leaves only its title. */}
-        <aside className={`relative z-10 lg:sticky lg:top-22 lg:order-last lg:w-[290px] lg:shrink-0 ${todoOpen ? '' : 'lg:hidden'}`}>
-          <TodoPanel list={todos} open={todoOpen} onToggle={() => showTodos(!todoOpen)} focusSignal={todoFocus} openInNewTab={openInNewTab} />
-        </aside>
+        {sidebarVisible && (
+          <aside className={`relative z-10 flex flex-col gap-5 lg:sticky lg:top-22 lg:order-last lg:w-[290px] lg:shrink-0 ${newsSections.length ? 'lg:max-h-[calc(100dvh-6.5rem)] lg:overflow-y-auto' : todoOpen ? '' : 'lg:hidden'}`}>
+            <TodoPanel list={todos} open={todoOpen} onToggle={() => showTodos(!todoOpen)} focusSignal={todoFocus} openInNewTab={openInNewTab} />
+            {newsSections.length > 0 && <NewsPanel sections={newsSections} openInNewTab={openInNewTab} />}
+          </aside>
+        )}
         {/* Swiping here switches desktops; the to-do panel keeps its own touches */}
         <div className="min-w-0 flex-1" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
         <motion.div
@@ -499,7 +514,7 @@ function Home({ board, desktopId, onSelectDesktop, loading, loadError, staleErro
               openInNewTab={openInNewTab}
               defaultIntranet={defaultIntranet !== false}
               layoutColumns={layoutColumns}
-              besidePanel={todoOpen}
+              besidePanel={sidebarVisible && (todoOpen || newsSections.length > 0)}
               desktop={desktop}
               groups={result.groups}
               editing={editing}
