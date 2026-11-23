@@ -36,6 +36,21 @@ export function parseBookmarkUrl(input: string): ParsedBookmark | null {
 
 const MAX_ICON_URL = 2000
 const MAX_INTRANET_URL = 2000
+const MAX_NEWS_FEED_URL = 8192
+
+/** A subscription URL, an empty string to clear it, or null if invalid. */
+export function parseNewsFeedUrl(input: unknown): string | null {
+  if (typeof input !== 'string') return null
+  const value = input.trim()
+  if (!value) return ''
+  if (value.length > MAX_NEWS_FEED_URL || !/^https?:\/\//i.test(value) || /\s/.test(value)) return null
+  try {
+    const url = new URL(value)
+    return url.username || url.password ? null : value
+  } catch {
+    return null
+  }
+}
 
 /** Normalized http(s) address of a custom icon image, or null */
 export function parseIconUrl(input: string): string | null {

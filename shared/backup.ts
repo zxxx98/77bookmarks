@@ -1,7 +1,7 @@
 import { parseClickCounts, totalClicks, type ClickCounts } from './counters'
 import { isView, MAX_SITE_DESCRIPTION_LENGTH, MAX_TODO_LENGTH, type View } from './types'
 import { isLayoutColumns, MAX_SITE_NAME_LENGTH, type SystemSettings } from './settings'
-import { parseBookmarkUrl, parseIconUrl, parseIntranetUrl } from './url'
+import { parseBookmarkUrl, parseIconUrl, parseIntranetUrl, parseNewsFeedUrl } from './url'
 import { parseVault, type Vault } from './vault'
 
 export interface BackupMetadata {
@@ -172,6 +172,8 @@ function parseBackupContents(input: unknown, legacyName: string): ParsedBackup |
     if (typeof settings.siteName !== 'string' || !settings.siteName.trim() || settings.siteName.length > MAX_SITE_NAME_LENGTH || typeof settings.openInNewTab !== 'boolean' || !isLayoutColumns(settings.layoutColumns)) return { error: '完整备份中的设置格式有误' }
     if (settings.autoSortByUsage !== undefined && typeof settings.autoSortByUsage !== 'boolean') return { error: '完整备份中的设置格式有误' }
     if (settings.defaultIntranet !== undefined && typeof settings.defaultIntranet !== 'boolean') return { error: '完整备份中的设置格式有误' }
+    const newsFeedUrl = settings.newsFeedUrl === undefined ? '' : parseNewsFeedUrl(settings.newsFeedUrl)
+    if (newsFeedUrl === null) return { error: '完整备份中的快报订阅地址有误' }
     if (typeof data.since !== 'number' || !Number.isSafeInteger(data.since) || data.since < 0) return { error: '完整备份中的统计开始时间有误' }
     const todos: FullBackupLocal['todos'] = []
     for (const todo of data.todos) {
@@ -180,7 +182,19 @@ function parseBackupContents(input: unknown, legacyName: string): ParsedBackup |
     }
     const preferences: Record<string, string> = {}
     if (isObject(data.preferences)) for (const key of ['theme', 'style', 'search_engine', 'todo-panel']) { const value = data.preferences[key]; if (typeof value === 'string' && value.length <= 100) preferences[key] = value }
-    local = { preferences, settings: { siteName: settings.siteName.trim(), openInNewTab: settings.openInNewTab, layoutColumns: settings.layoutColumns, autoSortByUsage: settings.autoSortByUsage === true, defaultIntranet: settings.defaultIntranet !== false }, since: data.since, todos }
+    local = {
+      preferences,
+      settings: {
+        siteName: settings.siteName.trim(),
+        openInNewTab: settings.openInNewTab,
+        layoutColumns: settings.layoutColumns,
+        autoSortByUsage: settings.autoSortByUsage === true,
+        defaultIntranet: settings.defaultIntranet !== false,
+        ...(newsFeedUrl ? { newsFeedUrl } : {}),
+      },
+      since: data.since,
+      todos,
+    }
     const seen = new Set<string>()
     const records: BackupMetadata[] = [...todos]
     for (const d of desktops) { records.push(d); for (const g of d.groups) { records.push(g); for (const s of g.sites) records.push(s, ...s.links) } }

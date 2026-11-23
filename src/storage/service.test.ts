@@ -105,6 +105,29 @@ describe('desktops, groups, sorting and cascading deletion', () => {
   })
 })
 
+describe('news feed settings', () => {
+  it('accepts a direct feed address without a file extension', async () => {
+    const url = 'https://example.com/feed'
+    await service.updateSettings({ ...DEFAULT_SETTINGS, newsFeedUrl: url })
+    expect((await service.settings()).newsFeedUrl).toBe(url)
+  })
+
+  it('saves, restores and clears a feed URL without rewriting its query', async () => {
+    const url = 'http://localhost:8000/rss?f=https%3A%2F%2Fa.example%2Frss&f=https%3A%2F%2Fb.example%2Frss'
+    expect((await service.settings()).newsFeedUrl).toBeUndefined()
+    await service.updateSettings({ ...DEFAULT_SETTINGS, newsFeedUrl: ` ${url} ` })
+    await service.updateSettings({ ...DEFAULT_SETTINGS, layoutColumns: 3 })
+    await expect(service.updateSettings({ ...DEFAULT_SETTINGS, newsFeedUrl: 'file:///rss.xml' })).rejects.toThrow('快报订阅地址')
+    expect((await service.settings()).newsFeedUrl).toBe(url)
+
+    const backup = JSON.parse((await service.exportBackup()).json)
+    await service.updateSettings({ ...DEFAULT_SETTINGS, newsFeedUrl: '' })
+    expect((await service.settings()).newsFeedUrl).toBeUndefined()
+    await service.importBackup(backup, 'replace')
+    expect((await service.settings()).newsFeedUrl).toBe(url)
+  })
+})
+
 describe('automatic usage sorting', () => {
   it('defaults to off for both new and existing installations', async () => {
     expect((await service.settings()).autoSortByUsage).toBe(false)

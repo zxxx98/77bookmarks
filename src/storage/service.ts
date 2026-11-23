@@ -3,7 +3,7 @@ import { backupStats, parseBackup, type BackupDesktop, type BackupSite } from '.
 import { DEFAULT_SETTINGS, isLayoutColumns, MAX_SITE_NAME_LENGTH, type SystemSettings } from '../../shared/settings'
 import { DEFAULT_DESKTOP_SYNC_ID, DEFAULT_GROUP_SYNC_ID, mergeSnapshots, snapshotFingerprint, type MergeStats, type SyncSnapshot } from '../../shared/sync'
 import { MAX_SITE_DESCRIPTION_LENGTH, MAX_TODO_LENGTH, isView, type AddResult, type BoardPage, type ClickTarget, type Desktop, type ImportMode, type ImportResult, type OrderInput, type UsageStats, type View } from '../../shared/types'
-import { fallbackLinkTitle, hostOf, parseBookmarkUrl, parseIconUrl, parseIntranetUrl } from '../../shared/url'
+import { fallbackLinkTitle, hostOf, parseBookmarkUrl, parseIconUrl, parseIntranetUrl, parseNewsFeedUrl } from '../../shared/url'
 import { MAX_CHUNKS, parseChunks, restoreVault, type Vault } from '../../shared/vault'
 import { EMPTY_SYNC_CONFIG, EMPTY_SYNC_STATE, isSyncKind, type SyncConfig, type SyncState, type SyncStatus } from '../sync/types'
 import { changed, entity, openLocalDatabase, sorted, STORES, SYNC_STORE, VAULT_STORE, type DesktopRow, type Entity, type GroupRow, type LinkRow, type LocalDatabase, type SettingsRow, type SiteRow, type SyncTransaction, type TodoRow, type WriteTransaction } from './db'
@@ -184,19 +184,23 @@ export class LocalService {
       (settings.autoSortByUsage !== undefined && typeof settings.autoSortByUsage !== 'boolean') ||
       (settings.defaultIntranet !== undefined && typeof settings.defaultIntranet !== 'boolean')
     ) throw new Error('无效的设置')
-    const value: SystemSettings = {
-      siteName,
-      openInNewTab: settings.openInNewTab,
-      layoutColumns: settings.layoutColumns,
-      autoSortByUsage: settings.autoSortByUsage ?? false,
-      defaultIntranet: settings.defaultIntranet ?? true,
-    }
-    await this.write(async (tx) => {
+    const newsFeedUrl = settings.newsFeedUrl === undefined ? undefined : parseNewsFeedUrl(settings.newsFeedUrl)
+    if (newsFeedUrl === null) throw new Error('请输入有效的 HTTP 或 HTTPS 快报订阅地址')
+    return this.write(async (tx) => {
       // Settings carry their own modification time so that the newer side wins when syncing
       const previous = await tx.objectStore('settings').get('system')
+      const savedFeedUrl = newsFeedUrl ?? (previous?.value as SystemSettings | undefined)?.newsFeedUrl
+      const value: SystemSettings = {
+        siteName,
+        openInNewTab: settings.openInNewTab,
+        layoutColumns: settings.layoutColumns,
+        autoSortByUsage: settings.autoSortByUsage ?? false,
+        defaultIntranet: settings.defaultIntranet ?? true,
+        ...(savedFeedUrl ? { newsFeedUrl: savedFeedUrl } : {}),
+      }
       await tx.objectStore('settings').put({ key: 'system', value, updatedAt: Math.max(Date.now(), (previous?.updatedAt ?? 0) + 1) })
+      return value
     })
-    return value
   }
   private async firstGroup(tx: WriteTransaction, desktopId: number) {
     requireRow(await tx.objectStore('desktops').get(desktopId), '桌面')

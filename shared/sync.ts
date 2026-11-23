@@ -1,7 +1,7 @@
 import { clickCountsOf, mergeClickCounts, parseClickCounts, totalClicks, type ClickCounts } from './counters'
 import { isLayoutColumns, MAX_SITE_NAME_LENGTH, DEFAULT_SETTINGS, type SystemSettings } from './settings'
 import { isView, MAX_SITE_DESCRIPTION_LENGTH, MAX_TODO_LENGTH, type View } from './types'
-import { parseBookmarkUrl, parseIntranetUrl } from './url'
+import { parseBookmarkUrl, parseIntranetUrl, parseNewsFeedUrl } from './url'
 import { mergeVaults, parseVault, type Vault } from './vault'
 
 /**
@@ -179,6 +179,8 @@ export function parseSnapshot(input: unknown): SyncSnapshot | null {
   if (!siteName || typeof settings.openInNewTab !== 'boolean' || !isLayoutColumns(settings.layoutColumns)) return null
   if (settings.autoSortByUsage !== undefined && typeof settings.autoSortByUsage !== 'boolean') return null
   if (settings.defaultIntranet !== undefined && typeof settings.defaultIntranet !== 'boolean') return null
+  const newsFeedUrl = settings.newsFeedUrl === undefined ? '' : parseNewsFeedUrl(settings.newsFeedUrl)
+  if (newsFeedUrl === null) return null
   if (typeof input.since !== 'number' || !Number.isSafeInteger(input.since) || input.since < 0) return null
 
   const desktops: SyncDesktop[] = []
@@ -265,7 +267,14 @@ export function parseSnapshot(input: unknown): SyncSnapshot | null {
     updatedAt: stamp(input.updatedAt),
     since: input.since,
     settings: {
-      value: { siteName, openInNewTab: settings.openInNewTab, layoutColumns: settings.layoutColumns, autoSortByUsage: settings.autoSortByUsage === true, defaultIntranet: settings.defaultIntranet !== false },
+      value: {
+        siteName,
+        openInNewTab: settings.openInNewTab,
+        layoutColumns: settings.layoutColumns,
+        autoSortByUsage: settings.autoSortByUsage === true,
+        defaultIntranet: settings.defaultIntranet !== false,
+        ...(newsFeedUrl ? { newsFeedUrl } : {}),
+      },
       updatedAt: stamp(input.settings.updatedAt),
     },
     desktops, groups, sites, links, todos,

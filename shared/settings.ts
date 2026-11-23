@@ -11,6 +11,7 @@ export interface SystemSettings {
   layoutColumns: LayoutColumns
   autoSortByUsage: boolean
   defaultIntranet?: boolean
+  newsFeedUrl?: string
 }
 
 export const DEFAULT_SETTINGS: SystemSettings = {

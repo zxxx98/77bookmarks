@@ -3,6 +3,7 @@ import { Cloud, DatabaseBackup, LayoutGrid, LoaderCircle, MousePointerClick, Ref
 import { useEffect, useState, type FormEvent } from 'react'
 import { MAX_SITE_NAME_LENGTH, type LayoutColumns, type SystemSettings } from '../../shared/settings'
 import type { Desktop, DesktopSummary } from '../../shared/types'
+import { parseNewsFeedUrl } from '../../shared/url'
 import { api } from '../api'
 import { Dialog, useUi } from '../ui'
 import { BackupSettings } from './BackupSettings'
@@ -86,23 +87,37 @@ function Content({
   const [layoutColumns, setLayoutColumns] = useState(settings.layoutColumns)
   const [autoSortByUsage, setAutoSortByUsage] = useState(settings.autoSortByUsage)
   const [defaultIntranet, setDefaultIntranet] = useState(settings.defaultIntranet !== false)
+  const [feedDraft, setFeedDraft] = useState<string | null>(null)
+  const [feedInvalid, setFeedInvalid] = useState(false)
   const [keepSnapshot, setKeepSnapshot] = useState(snapshot.enabled)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const savedFeedUrl = settings.newsFeedUrl ?? ''
+  const feedUrl = feedDraft ?? savedFeedUrl
 
   const save = async (event: FormEvent) => {
     event.preventDefault()
     if (saving || !name.trim()) return
+    const newsFeedUrl = parseNewsFeedUrl(feedUrl)
+    if (newsFeedUrl === null) {
+      setFeedInvalid(true)
+      onTabChange('general')
+      return
+    }
     setSaving(true)
     setError('')
     try {
-      const settings = await api.updateSettings({ siteName: name.trim(), openInNewTab, layoutColumns, autoSortByUsage, defaultIntranet })
+      const settings = await api.updateSettings({
+        siteName: name.trim(), openInNewTab, layoutColumns, autoSortByUsage, defaultIntranet,
+        ...(newsFeedUrl === savedFeedUrl ? {} : { newsFeedUrl }),
+      })
       queryClient.setQueryData<SystemSettings>(['settings'], settings)
       setName(settings.siteName)
       setOpenInNewTab(settings.openInNewTab)
       setLayoutColumns(settings.layoutColumns)
       setAutoSortByUsage(settings.autoSortByUsage)
       setDefaultIntranet(settings.defaultIntranet !== false)
+      setFeedDraft(null)
       toast('设置已保存')
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存失败，请重试')
@@ -116,7 +131,8 @@ function Content({
     openInNewTab === settings.openInNewTab &&
     layoutColumns === settings.layoutColumns &&
     autoSortByUsage === settings.autoSortByUsage &&
-    defaultIntranet === (settings.defaultIntranet !== false)
+    defaultIntranet === (settings.defaultIntranet !== false) &&
+    feedUrl.trim() === savedFeedUrl
 
   return (
     <>
@@ -163,6 +179,27 @@ function Content({
             aria-describedby="site-name-hint"
           />
           <p id="site-name-hint" className="mt-2 text-xs text-faint">显示在顶栏和浏览器标题中，最多 {MAX_SITE_NAME_LENGTH} 个字符。</p>
+          <label className="label mt-5" htmlFor="news-feed-url">快报订阅地址</label>
+          <input
+            id="news-feed-url"
+            className="input"
+            inputMode="url"
+            autoComplete="off"
+            autoCapitalize="none"
+            spellCheck={false}
+            value={feedUrl}
+            disabled={saving}
+            onChange={(event) => {
+              setFeedDraft(event.target.value)
+              setFeedInvalid(false)
+              setError('')
+            }}
+            placeholder="https://example.com/feed"
+            aria-invalid={feedInvalid}
+            aria-describedby={feedInvalid ? 'news-feed-url-hint news-feed-url-error' : 'news-feed-url-hint'}
+          />
+          <p id="news-feed-url-hint" className="mt-2 text-xs text-faint">填写一个 RSS 或 Atom 订阅地址。留空后保存可清除。</p>
+          {feedInvalid && <p id="news-feed-url-error" role="alert" className="mt-1.5 text-sm text-danger">请输入有效的 HTTP 或 HTTPS 快报订阅地址。</p>}
           <label className="mt-5 flex cursor-pointer items-center gap-2.5 text-sm">
             <input
               type="checkbox"

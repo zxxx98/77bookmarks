@@ -208,16 +208,16 @@ describe('syncing a board between two devices', () => {
 
   it('syncs todos and settings and never uploads icons or the sync token', async () => {
     const a = await device()
+    const newsFeedUrl = 'https://feeds.example.com/rss?f=a&f=b'
     const added = await a.service.addBookmark('https://icons.example.com')
     await a.service.setIcon(added.siteId, { dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=' })
     await a.service.addTodo('共享待办')
-    await a.service.updateSettings({ siteName: '共享名称', openInNewTab: false, layoutColumns: 2, autoSortByUsage: true })
+    await a.service.updateSettings({ siteName: '共享名称', openInNewTab: false, layoutColumns: 2, autoSortByUsage: true, newsFeedUrl })
     await a.engine.run()
 
     const b = await device()
     await b.engine.run()
-    expect((await b.service.settings()).siteName).toBe('共享名称')
-    expect((await b.service.settings()).autoSortByUsage).toBe(true)
+    expect(await b.service.settings()).toMatchObject({ siteName: '共享名称', autoSortByUsage: true, newsFeedUrl })
     expect((await b.service.todos()).map((todo) => todo.text)).toEqual(['共享待办'])
     expect(await b.service.icon((await sites(b.service))[0].id)).toBeNull()
     const uploaded = JSON.stringify(cloud.snapshot)
