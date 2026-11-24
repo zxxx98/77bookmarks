@@ -2,8 +2,8 @@ import { LocalService, READ_METHODS, SERVICE_METHODS, type ServiceMethod } from 
 import { DATA_CHANGED, DATA_MESSAGE, NEWS_MESSAGE, SYNC_MESSAGE, TITLE_MESSAGE } from '../src/storage/messages'
 import { SYNC_METHODS, runSyncMethod } from '../src/sync/control'
 import { fetchTitleHtml } from '../src/title-fetch'
-import { createNewsFeedReader } from '../src/news-feed'
-import { newsSectionsOf, type NewsFeedResult } from '../shared/news'
+import { createNewsFeedReader, readNewsBatch } from '../src/news-feed'
+import { newsOrigin, newsOrigins, newsSectionsOf, newsSourcesAt, type NewsFeedResult } from '../shared/news'
 import { parseBookmarkUrl } from '../shared/url'
 import { attachContextMenuHandler, registerContextMenus, reportAddResult } from './context-menu'
 import { describeResult, isBookmarkable } from './lib'
@@ -32,9 +32,16 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   const read = async (): Promise<NewsFeedResult> => {
     const section = newsSectionsOf(await service.settings()).find(({ id }) => id === message.sectionId)
     if (!section) throw new Error('这个快报板块尚未配置')
-    const granted = await chrome.permissions.contains({ origins: [`${new URL(section.feedUrl).origin}/*`] })
-    if (!granted) return { status: 'permission' }
-    return { status: 'ok', items: await readNewsFeed(section.feedUrl) }
+    const offset = message.offset ?? 0
+    const sources = newsSourcesAt(section, offset)
+    if (!sources) throw new Error('快报请求无效')
+    // Check the whole section on the first page so one user action can authorize all of it.
+    const origins = newsOrigins(offset === 0 ? section.sources : sources)
+    const grants = await Promise.all(origins.map((origin) => chrome.permissions.contains({ origins: [origin] })))
+    const missingOrigins = origins.filter((_origin, index) => !grants[index])
+    const missing = new Set(missingOrigins)
+    const result = await readNewsBatch(sources, (url) => missing.has(newsOrigin(url)) ? Promise.resolve([]) : readNewsFeed(url), section.sources.length > 1)
+    return offset === 0 && missingOrigins.length ? { ...result, missingOrigins } : result
   }
   void read().then((value) => respond({ value }), () => respond({ error: '无法读取快报订阅' }))
   return true

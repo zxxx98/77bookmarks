@@ -106,6 +106,20 @@ describe('desktops, groups, sorting and cascading deletion', () => {
 })
 
 describe('news feed settings', () => {
+  it('keeps imported groups and a manual feed independently through a full backup', async () => {
+    const newsFeedUrl = 'https://example.com/feed'
+    const newsSections = [{ id: 'opml-1', name: '科技', sources: [{ name: '示例', url: 'https://tech.example/feed' }] }]
+    await service.updateSettings({ ...DEFAULT_SETTINGS, newsFeedUrl, newsSections })
+    await service.updateSettings({ ...DEFAULT_SETTINGS, siteName: '书签' })
+    expect(await service.settings()).toMatchObject({ newsFeedUrl, newsSections })
+    const backup = JSON.parse((await service.exportBackup()).json)
+    await service.updateSettings({ ...DEFAULT_SETTINGS, newsSections: [] })
+    expect((await service.settings()).newsSections).toBeUndefined()
+    expect((await service.settings()).newsFeedUrl).toBe(newsFeedUrl)
+    await service.importBackup(backup, 'replace')
+    expect(await service.settings()).toMatchObject({ newsFeedUrl, newsSections })
+  })
+
   it('accepts a direct feed address without a file extension', async () => {
     const url = 'https://example.com/feed'
     await service.updateSettings({ ...DEFAULT_SETTINGS, newsFeedUrl: url })

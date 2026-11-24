@@ -30,11 +30,11 @@ export interface Platform {
   }
   /** Downloads the start of a page so its title can be read */
   pageHtml(url: string, origin: string, requestPermission: boolean): Promise<PageHtml>
-  newsFeed(section: NewsSection): Promise<NewsFeedResult>
+  newsFeed(section: NewsSection, offset: number): Promise<NewsFeedResult>
   /** Per-site access the browser has to grant; absent where requests need no such grant */
   hostAccess?: {
     contains(origin: string): Promise<boolean>
-    request(origin: string): Promise<boolean>
+    request(origin: string | string[]): Promise<boolean>
   }
   /**
    * Opening an address in an incognito window, which a page cannot do by itself. Absent or

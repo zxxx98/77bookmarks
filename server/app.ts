@@ -1,6 +1,6 @@
 import { DEFAULT_SETTINGS } from '../shared/settings'
-import { newsSectionsOf } from '../shared/news'
-import { createNewsFeedReader } from '../src/news-feed'
+import { newsSectionsOf, newsSourcesAt } from '../shared/news'
+import { createNewsFeedReader, readNewsBatch } from '../src/news-feed'
 import { LocalService, READ_METHODS, SERVICE_METHODS, type ServiceMethod } from '../src/storage/service'
 import { SYNC_METHODS, runSyncMethod } from '../src/sync/control'
 import { fetchTitleHtml } from '../src/title-fetch'
@@ -203,11 +203,14 @@ export async function createApp({ store, password, fetchIcon = fetchSiteIcon, up
       case 'POST /api/sync': return sync(request)
       case 'GET /api/events': return events()
       case 'GET /api/news-feed': {
-        const sectionId = new URL(request.url).searchParams.get('section')
+        const params = new URL(request.url).searchParams
+        const sectionId = params.get('section')
         const section = newsSectionsOf(await service.settings()).find(({ id }) => id === sectionId)
         if (!section) return fail(404, '这个快报板块尚未配置')
+        const sources = newsSourcesAt(section, Number(params.get('offset') ?? 0))
+        if (!sources) return fail(400, '快报请求无效')
         try {
-          return json({ status: 'ok', items: await readNewsFeed(section.feedUrl) })
+          return json(await readNewsBatch(sources, readNewsFeed, section.sources.length > 1))
         } catch {
           return fail(502, '无法读取快报订阅')
         }

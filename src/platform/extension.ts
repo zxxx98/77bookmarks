@@ -1,6 +1,6 @@
 import { fetchTitleHtml } from '../title-fetch'
 import { DATA_CHANGED, DATA_MESSAGE, NEWS_MESSAGE, SYNC_MESSAGE, TITLE_MESSAGE } from '../storage/messages'
-import type { NewsFeedResult } from '../../shared/news'
+import { newsSourcesAt, type NewsFeedResult } from '../../shared/news'
 import type { LocalService } from '../storage/service'
 import type { Platform } from './types'
 
@@ -86,12 +86,14 @@ export const extensionPlatform: Platform = {
     const response = await chrome.runtime.sendMessage({ type: TITLE_MESSAGE, url })
     return { status: 'ok', html: typeof response?.html === 'string' ? response.html : null }
   },
-  async newsFeed(section) {
+  async newsFeed(section, offset) {
     if (!isExtension()) {
-      const { fetchNewsFeed } = await import('../news-feed')
-      return { status: 'ok', items: await fetchNewsFeed(section.feedUrl) }
+      const sources = newsSourcesAt(section, offset)
+      if (!sources) throw new Error('快报请求无效')
+      const { fetchNewsFeed, readNewsBatch } = await import('../news-feed')
+      return readNewsBatch(sources, fetchNewsFeed, section.sources.length > 1)
     }
-    const response = await chrome.runtime.sendMessage({ type: NEWS_MESSAGE, sectionId: section.id }) as { value?: NewsFeedResult; error?: string } | undefined
+    const response = await chrome.runtime.sendMessage({ type: NEWS_MESSAGE, sectionId: section.id, offset }) as { value?: NewsFeedResult; error?: string } | undefined
     if (!response?.value) throw new Error(response?.error ?? '无法读取快报订阅')
     return response.value
   },
@@ -123,7 +125,7 @@ export const extensionPlatform: Platform = {
     if (typeof chrome === 'undefined' || !chrome.permissions) return undefined
     return {
       contains: (origin: string) => chrome.permissions.contains({ origins: [origin] }),
-      request: (origin: string) => chrome.permissions.request({ origins: [origin] }),
+      request: (origin: string | string[]) => chrome.permissions.request({ origins: Array.isArray(origin) ? origin : [origin] }),
     }
   },
 }

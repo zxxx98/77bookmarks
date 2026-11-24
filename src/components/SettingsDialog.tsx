@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query'
-import { Cloud, DatabaseBackup, LayoutGrid, LoaderCircle, MousePointerClick, RefreshCw, Settings } from 'lucide-react'
-import { useEffect, useState, type FormEvent } from 'react'
+import { Cloud, DatabaseBackup, LayoutGrid, LoaderCircle, MousePointerClick, RefreshCw, Settings, Upload } from 'lucide-react'
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import type { NewsSection } from '../../shared/news'
 import { MAX_SITE_NAME_LENGTH, type LayoutColumns, type SystemSettings } from '../../shared/settings'
 import type { Desktop, DesktopSummary } from '../../shared/types'
 import { parseNewsFeedUrl } from '../../shared/url'
@@ -89,15 +90,37 @@ function Content({
   const [defaultIntranet, setDefaultIntranet] = useState(settings.defaultIntranet !== false)
   const [feedDraft, setFeedDraft] = useState<string | null>(null)
   const [feedInvalid, setFeedInvalid] = useState(false)
+  const opmlInput = useRef<HTMLInputElement>(null)
+  const [opmlDraft, setOpmlDraft] = useState<{ sections: NewsSection[]; filename?: string; skipped?: number } | null>(null)
+  const [readingOpml, setReadingOpml] = useState(false)
+  const [opmlError, setOpmlError] = useState('')
   const [keepSnapshot, setKeepSnapshot] = useState(snapshot.enabled)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const savedFeedUrl = settings.newsFeedUrl ?? ''
   const feedUrl = feedDraft ?? savedFeedUrl
+  const sections = opmlDraft?.sections ?? settings.newsSections ?? []
+
+  async function chooseOpml(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file || readingOpml || saving) return
+    setReadingOpml(true)
+    setOpmlError('')
+    try {
+      const { MAX_OPML_BYTES, readNewsOpml } = await import('../news-opml')
+      if (file.size > MAX_OPML_BYTES) throw new Error('OPML 文件不能超过 1 MB')
+      setOpmlDraft({ ...readNewsOpml(await file.text()), filename: file.name })
+    } catch (error) {
+      setOpmlError(error instanceof Error ? error.message : '无法读取此 OPML 文件')
+    } finally {
+      setReadingOpml(false)
+    }
+  }
 
   const save = async (event: FormEvent) => {
     event.preventDefault()
-    if (saving || !name.trim()) return
+    if (saving || readingOpml || !name.trim()) return
     const newsFeedUrl = parseNewsFeedUrl(feedUrl)
     if (newsFeedUrl === null) {
       setFeedInvalid(true)
@@ -110,6 +133,7 @@ function Content({
       const settings = await api.updateSettings({
         siteName: name.trim(), openInNewTab, layoutColumns, autoSortByUsage, defaultIntranet,
         ...(newsFeedUrl === savedFeedUrl ? {} : { newsFeedUrl }),
+        ...(opmlDraft ? { newsSections: opmlDraft.sections } : {}),
       })
       queryClient.setQueryData<SystemSettings>(['settings'], settings)
       setName(settings.siteName)
@@ -118,6 +142,7 @@ function Content({
       setAutoSortByUsage(settings.autoSortByUsage)
       setDefaultIntranet(settings.defaultIntranet !== false)
       setFeedDraft(null)
+      setOpmlDraft(null)
       toast('设置已保存')
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存失败，请重试')
@@ -132,7 +157,8 @@ function Content({
     layoutColumns === settings.layoutColumns &&
     autoSortByUsage === settings.autoSortByUsage &&
     defaultIntranet === (settings.defaultIntranet !== false) &&
-    feedUrl.trim() === savedFeedUrl
+    feedUrl.trim() === savedFeedUrl &&
+    !opmlDraft
 
   return (
     <>
@@ -200,6 +226,30 @@ function Content({
           />
           <p id="news-feed-url-hint" className="mt-2 text-xs text-faint">填写 RSS、Atom 或 JSON Feed 地址，内容会显示在桌面端的待办下方。留空后保存可清除。</p>
           {feedInvalid && <p id="news-feed-url-error" role="alert" className="mt-1.5 text-sm text-danger">请输入有效的 HTTP 或 HTTPS 快报订阅地址。</p>}
+          <fieldset className="mt-4 rounded-control border border-line px-3 py-2.5" disabled={saving || readingOpml}>
+            <legend className="px-1 text-xs font-medium text-muted">OPML 订阅分组</legend>
+            <input ref={opmlInput} type="file" aria-label="选择 OPML 文件" accept=".opml,.xml,application/xml,text/xml,text/x-opml,application/x-opml+xml" hidden onChange={chooseOpml} />
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" className="btn btn-soft h-8" onClick={() => opmlInput.current?.click()}>
+                {readingOpml ? <LoaderCircle size={14} className="animate-spin" /> : <Upload size={14} />}
+                上传 OPML
+              </button>
+              {sections.length > 0 && (
+                <button type="button" className="btn btn-soft h-8" onClick={() => { setOpmlDraft({ sections: [] }); setOpmlError('') }}>移除 OPML 分组</button>
+              )}
+            </div>
+            <p className="mt-2 text-xs text-faint">上传后点击保存设置。再次上传会替换已有的 OPML 分组。</p>
+            {opmlError && <p role="alert" className="mt-1.5 text-sm text-danger">{opmlError}</p>}
+            {sections.length > 0 && (
+              <details className="mt-2 text-xs text-muted">
+                <summary className="cursor-pointer" title={opmlDraft?.filename}>{sections.length} 个分组 · {sections.reduce((total, section) => total + section.sources.length, 0)} 个订阅源</summary>
+                <ul className="mt-2 max-h-32 space-y-1 overflow-y-auto pl-3">
+                  {sections.map(({ id, name, sources }) => <li key={id} className="break-words">{name} · {sources.length}</li>)}
+                </ul>
+              </details>
+            )}
+            {!!opmlDraft?.skipped && <p className="mt-1.5 text-xs text-muted">已跳过 {opmlDraft.skipped} 个无效或重复的订阅地址。</p>}
+          </fieldset>
           <label className="mt-5 flex cursor-pointer items-center gap-2.5 text-sm">
             <input
               type="checkbox"
@@ -265,7 +315,7 @@ function Content({
           </>}
           {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
           <div className="mt-5 flex justify-end">
-            <button className="btn btn-primary" disabled={saving || !name.trim() || unchanged}>
+            <button className="btn btn-primary" disabled={saving || readingOpml || !name.trim() || unchanged}>
               {saving && <LoaderCircle size={15} className="animate-spin" />}
               保存设置
             </button>
@@ -294,7 +344,7 @@ function Content({
           <p className="mt-2 text-xs text-faint">分组按所选列数排列，窄屏会自动减少列数。</p>
           {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
           <div className="mt-5 flex justify-end">
-            <button className="btn btn-primary" disabled={saving || !name.trim() || unchanged}>
+            <button className="btn btn-primary" disabled={saving || readingOpml || !name.trim() || unchanged}>
               {saving && <LoaderCircle size={15} className="animate-spin" />}
               保存设置
             </button>

@@ -1,5 +1,5 @@
 import { parseFeed } from 'feedsmith'
-import { NEWS_REFRESH_MS, type NewsItem } from '../shared/news'
+import { mergeNewsItems, newsSourceKey, NEWS_REFRESH_MS, type NewsFeedResult, type NewsItem, type NewsSource } from '../shared/news'
 import { parseNewsFeedUrl } from '../shared/url'
 
 const TIMEOUT_MS = 8000
@@ -77,17 +77,27 @@ export function readNewsItems(text: string, url: string): NewsItem[] {
     const date = entry.date ? Date.parse(entry.date) : NaN
     return [{
       title: headline.slice(0, 300), url: link.href,
-      source: (plainText(entry.source) || feedTitle || link.hostname).slice(0, 120),
+      source: (plainText(entry.source) || feedTitle || '').slice(0, 120),
       publishedAt: Number.isFinite(date) ? date : null,
     }]
   })
-  items.sort((a, b) => (b.publishedAt ?? Number.MIN_SAFE_INTEGER) - (a.publishedAt ?? Number.MIN_SAFE_INTEGER))
-  const seen = new Set<string>()
-  return items.filter(({ url }) => {
-    if (seen.has(url)) return false
-    seen.add(url)
-    return true
-  })
+  return mergeNewsItems(items, false)
+}
+
+export async function readNewsBatch(sources: NewsSource[], read: (url: string) => Promise<NewsItem[]>, aggregated: boolean): Promise<NewsFeedResult> {
+  const results = await Promise.allSettled(sources.map(({ url }) => read(url)))
+  const items: NewsItem[] = []
+  let failedSources = 0
+  for (const [index, result] of results.entries()) {
+    if (result.status === 'rejected') {
+      failedSources++
+      continue
+    }
+    const { name } = sources[index]
+    for (const item of result.value) items.push(item.source ? item : { ...item, source: name || new URL(item.url).hostname })
+  }
+  if (failedSources && !aggregated) throw new Error('无法读取快报订阅')
+  return { status: 'ok', items: mergeNewsItems(items, aggregated), ...(failedSources ? { failedSources } : {}) }
 }
 
 export async function fetchNewsFeed(input: string): Promise<NewsItem[]> {
@@ -126,16 +136,17 @@ export async function fetchNewsFeed(input: string): Promise<NewsItem[]> {
 export function createNewsFeedReader() {
   const cache = new Map<string, { items: Promise<NewsItem[]>; expiresAt: number }>()
   return (url: string): Promise<NewsItem[]> => {
-    const cached = cache.get(url)
+    const key = newsSourceKey(url)
+    const cached = cache.get(key)
     if (cached && cached.expiresAt > Date.now()) return cached.items
 
-    cache.delete(url)
+    cache.delete(key)
     const record = { items: fetchNewsFeed(url), expiresAt: Infinity }
-    cache.set(url, record)
+    cache.set(key, record)
     if (cache.size > MAX_CACHED_FEEDS) cache.delete(cache.keys().next().value!)
     void record.items.then(
       () => { record.expiresAt = Date.now() + NEWS_REFRESH_MS },
-      () => { if (cache.get(url) === record) cache.delete(url) },
+      () => { if (cache.get(key) === record) cache.delete(key) },
     )
     return record.items
   }

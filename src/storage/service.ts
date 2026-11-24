@@ -1,6 +1,7 @@
 import { clickCountsOf, totalClicks, type ClickCounts } from '../../shared/counters'
 import { backupStats, parseBackup, type BackupDesktop, type BackupSite } from '../../shared/backup'
 import { DEFAULT_SETTINGS, isLayoutColumns, MAX_SITE_NAME_LENGTH, type SystemSettings } from '../../shared/settings'
+import { parseNewsSections } from '../../shared/news'
 import { DEFAULT_DESKTOP_SYNC_ID, DEFAULT_GROUP_SYNC_ID, mergeSnapshots, snapshotFingerprint, type MergeStats, type SyncSnapshot } from '../../shared/sync'
 import { MAX_SITE_DESCRIPTION_LENGTH, MAX_TODO_LENGTH, isView, type AddResult, type BoardPage, type ClickTarget, type Desktop, type ImportMode, type ImportResult, type OrderInput, type UsageStats, type View } from '../../shared/types'
 import { fallbackLinkTitle, hostOf, parseBookmarkUrl, parseIconUrl, parseIntranetUrl, parseNewsFeedUrl } from '../../shared/url'
@@ -186,10 +187,14 @@ export class LocalService {
     ) throw new Error('无效的设置')
     const newsFeedUrl = settings.newsFeedUrl === undefined ? undefined : parseNewsFeedUrl(settings.newsFeedUrl)
     if (newsFeedUrl === null) throw new Error('请输入有效的 HTTP 或 HTTPS 快报订阅地址')
+    const newsSections = settings.newsSections === undefined ? undefined : parseNewsSections(settings.newsSections)
+    if (newsSections === null) throw new Error('快报订阅分组有误')
     return this.write(async (tx) => {
       // Settings carry their own modification time so that the newer side wins when syncing
       const previous = await tx.objectStore('settings').get('system')
-      const savedFeedUrl = newsFeedUrl ?? (previous?.value as SystemSettings | undefined)?.newsFeedUrl
+      const saved = previous?.value as SystemSettings | undefined
+      const savedFeedUrl = newsFeedUrl ?? saved?.newsFeedUrl
+      const savedSections = newsSections ?? saved?.newsSections
       const value: SystemSettings = {
         siteName,
         openInNewTab: settings.openInNewTab,
@@ -197,6 +202,7 @@ export class LocalService {
         autoSortByUsage: settings.autoSortByUsage ?? false,
         defaultIntranet: settings.defaultIntranet ?? true,
         ...(savedFeedUrl ? { newsFeedUrl: savedFeedUrl } : {}),
+        ...(savedSections?.length ? { newsSections: savedSections } : {}),
       }
       await tx.objectStore('settings').put({ key: 'system', value, updatedAt: Math.max(Date.now(), (previous?.updatedAt ?? 0) + 1) })
       return value

@@ -21,7 +21,7 @@ export function readSettings(): SystemSettings {
 }
 
 export function rememberSettings(settings: SystemSettings): SystemSettings {
-  const { newsFeedUrl: _newsFeedUrl, ...displaySettings } = settings
+  const { newsFeedUrl: _newsFeedUrl, newsSections: _newsSections, ...displaySettings } = settings
   try {
     preferences.setItem(SETTINGS_KEY, JSON.stringify(displaySettings))
   } catch { /* A full or unavailable storage must not prevent loading or saving. */ }

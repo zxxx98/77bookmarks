@@ -1,6 +1,7 @@
 import { parseClickCounts, totalClicks, type ClickCounts } from './counters'
 import { isView, MAX_SITE_DESCRIPTION_LENGTH, MAX_TODO_LENGTH, type View } from './types'
 import { isLayoutColumns, MAX_SITE_NAME_LENGTH, type SystemSettings } from './settings'
+import { parseNewsSections } from './news'
 import { parseBookmarkUrl, parseIconUrl, parseIntranetUrl, parseNewsFeedUrl } from './url'
 import { parseVault, type Vault } from './vault'
 
@@ -174,6 +175,8 @@ function parseBackupContents(input: unknown, legacyName: string): ParsedBackup |
     if (settings.defaultIntranet !== undefined && typeof settings.defaultIntranet !== 'boolean') return { error: '完整备份中的设置格式有误' }
     const newsFeedUrl = settings.newsFeedUrl === undefined ? '' : parseNewsFeedUrl(settings.newsFeedUrl)
     if (newsFeedUrl === null) return { error: '完整备份中的快报订阅地址有误' }
+    const newsSections = settings.newsSections === undefined ? [] : parseNewsSections(settings.newsSections)
+    if (newsSections === null) return { error: '完整备份中的快报订阅分组有误' }
     if (typeof data.since !== 'number' || !Number.isSafeInteger(data.since) || data.since < 0) return { error: '完整备份中的统计开始时间有误' }
     const todos: FullBackupLocal['todos'] = []
     for (const todo of data.todos) {
@@ -191,6 +194,7 @@ function parseBackupContents(input: unknown, legacyName: string): ParsedBackup |
         autoSortByUsage: settings.autoSortByUsage === true,
         defaultIntranet: settings.defaultIntranet !== false,
         ...(newsFeedUrl ? { newsFeedUrl } : {}),
+        ...(newsSections.length ? { newsSections } : {}),
       },
       since: data.since,
       todos,

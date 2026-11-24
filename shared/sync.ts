@@ -1,5 +1,6 @@
 import { clickCountsOf, mergeClickCounts, parseClickCounts, totalClicks, type ClickCounts } from './counters'
 import { isLayoutColumns, MAX_SITE_NAME_LENGTH, DEFAULT_SETTINGS, type SystemSettings } from './settings'
+import { parseNewsSections } from './news'
 import { isView, MAX_SITE_DESCRIPTION_LENGTH, MAX_TODO_LENGTH, type View } from './types'
 import { parseBookmarkUrl, parseIntranetUrl, parseNewsFeedUrl } from './url'
 import { mergeVaults, parseVault, type Vault } from './vault'
@@ -181,6 +182,8 @@ export function parseSnapshot(input: unknown): SyncSnapshot | null {
   if (settings.defaultIntranet !== undefined && typeof settings.defaultIntranet !== 'boolean') return null
   const newsFeedUrl = settings.newsFeedUrl === undefined ? '' : parseNewsFeedUrl(settings.newsFeedUrl)
   if (newsFeedUrl === null) return null
+  const newsSections = settings.newsSections === undefined ? [] : parseNewsSections(settings.newsSections)
+  if (newsSections === null) return null
   if (typeof input.since !== 'number' || !Number.isSafeInteger(input.since) || input.since < 0) return null
 
   const desktops: SyncDesktop[] = []
@@ -274,6 +277,7 @@ export function parseSnapshot(input: unknown): SyncSnapshot | null {
         autoSortByUsage: settings.autoSortByUsage === true,
         defaultIntranet: settings.defaultIntranet !== false,
         ...(newsFeedUrl ? { newsFeedUrl } : {}),
+        ...(newsSections.length ? { newsSections } : {}),
       },
       updatedAt: stamp(input.settings.updatedAt),
     },

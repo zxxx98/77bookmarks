@@ -1,7 +1,7 @@
-import { useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery } from '@tanstack/react-query'
 import { ArrowUpRight, ChevronDown, LoaderCircle } from 'lucide-react'
-import { useId, useState } from 'react'
-import { NEWS_REFRESH_MS, type NewsItem, type NewsSection } from '../../shared/news'
+import { useEffect, useId, useMemo, useState } from 'react'
+import { mergeNewsItems, newsOrigins, NEWS_BATCH_SIZE, NEWS_REFRESH_MS, type NewsItem, type NewsSection } from '../../shared/news'
 import { platform } from '../platform'
 
 const VISIBLE_ITEMS = 6
@@ -33,14 +33,21 @@ export function NewsPanel({ sections, openInNewTab }: { sections: NewsSection[];
       </header>
       <div id={contentId} hidden={!open} className="overflow-hidden rounded-card border-[length:var(--border-w)] border-line bg-surface shadow-card">
         {open && <>
-          {sections.length > 1 && (
+          {sections.length > 4 ? (
+            <div className="border-b border-line px-2 py-1.5">
+              <select aria-label="快报板块" className="input h-8" value={section.id} onChange={(event) => setActiveId(event.target.value)}>
+                {sections.map(({ id, name }) => <option key={id} value={id}>{name}</option>)}
+              </select>
+            </div>
+          ) : sections.length > 1 && (
             <div role="group" aria-label="快报板块" className="flex flex-wrap gap-1 border-b border-line px-2 py-1.5">
               {sections.map(({ id, name }) => (
                 <button
                   key={id}
                   type="button"
                   aria-pressed={section.id === id}
-                  className={`rounded-control px-2.5 py-1 text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-accent/50 ${section.id === id ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-fg/6 hover:text-fg'}`}
+                  className={`max-w-full truncate rounded-control px-2.5 py-1 text-xs font-medium outline-none focus-visible:ring-2 focus-visible:ring-accent/50 ${section.id === id ? 'bg-accent-soft text-accent' : 'text-muted hover:bg-fg/6 hover:text-fg'}`}
+                  title={name}
                   onClick={() => setActiveId(id)}
                 >
                   {name}
@@ -58,19 +65,35 @@ export function NewsPanel({ sections, openInNewTab }: { sections: NewsSection[];
 function NewsList({ section, openInNewTab }: { section: NewsSection; openInNewTab: boolean }) {
   const [granting, setGranting] = useState(false)
   const [grantFailed, setGrantFailed] = useState(false)
-  const query = useQuery({
-    queryKey: ['news-feed', section.id, section.feedUrl],
-    queryFn: () => platform.newsFeed(section),
+  const originCount = useMemo(() => newsOrigins(section.sources).length, [section.sources])
+  const query = useInfiniteQuery({
+    queryKey: ['news-feed', section.id, section.sources],
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => platform.newsFeed(section, pageParam),
+    getNextPageParam: (_last, [first], offset) => {
+      if (first.missingOrigins?.length === originCount) return undefined
+      const next = offset + NEWS_BATCH_SIZE
+      return next < section.sources.length ? next : undefined
+    },
     retry: false,
-    staleTime: (query) => query.state.data?.status === 'permission' ? 0 : NEWS_REFRESH_MS,
-    refetchInterval: (query) => query.state.data?.status === 'permission' ? false : NEWS_REFRESH_MS,
+    staleTime: NEWS_REFRESH_MS,
+    refetchInterval: (query) => query.state.data?.pages[0]?.missingOrigins?.length === originCount ? false : NEWS_REFRESH_MS,
   })
+  const { fetchNextPage, hasNextPage, isFetching, isError, data } = query
+
+  useEffect(() => {
+    if (hasNextPage && !isFetching && !isError) void fetchNextPage({ cancelRefetch: false })
+  }, [fetchNextPage, hasNextPage, isFetching, isError])
+
+  const missingOrigins = data?.pages[0]?.missingOrigins
+  const failedSources = data?.pages.reduce((total, page) => total + (page.failedSources ?? 0), 0) ?? 0
+  const items = useMemo(() => mergeNewsItems(data?.pages.flatMap((page) => page.items) ?? [], section.sources.length > 1), [data, section.sources.length])
 
   async function grantAccess() {
     setGranting(true)
     setGrantFailed(false)
     try {
-      if (await platform.hostAccess?.request(`${new URL(section.feedUrl).origin}/*`)) await query.refetch()
+      if (missingOrigins?.length && await platform.hostAccess?.request(missingOrigins)) await query.refetch()
       else setGrantFailed(true)
     } catch {
       setGrantFailed(true)
@@ -79,26 +102,20 @@ function NewsList({ section, openInNewTab }: { section: NewsSection; openInNewTa
     }
   }
 
-  if (query.isPending) return (
-    <div className="grid place-items-center px-3 py-6" role="status" aria-label="正在加载快报">
-      <LoaderCircle size={18} className="animate-spin text-faint" />
-    </div>
-  )
-  if (query.data?.status === 'permission' && !query.isError) return (
-    <div className="grid justify-items-center gap-2 px-3 py-4 text-center text-sm text-muted">
-      <p>{grantFailed ? '未获得订阅站点权限，可以重试。' : '允许访问订阅站点后即可显示快报。'}</p>
-      <button type="button" className="btn btn-soft h-8" disabled={granting} onClick={() => void grantAccess()}>允许读取订阅</button>
-    </div>
-  )
-
-  const items = query.data?.status === 'ok' ? query.data.items : []
+  const loading = !items.length && !isError && (query.isPending || hasNextPage || isFetching)
   const scrollable = items.length > VISIBLE_ITEMS
   return (
     <>
-      {query.isError && (
+      {missingOrigins?.length ? (
+        <div className="grid justify-items-center gap-2 px-3 py-3 text-center text-xs text-muted">
+          <p>{grantFailed ? '未获得订阅站点权限，可以重试。' : `此板块有 ${missingOrigins.length} 个站点需要授权。`}</p>
+          <button type="button" className="btn btn-soft h-8" disabled={granting} onClick={() => void grantAccess()}>允许读取订阅</button>
+        </div>
+      ) : null}
+      {(isError || failedSources > 0) && (
         <div className="flex items-center justify-between gap-2 px-3 py-2 text-xs text-muted" role="status">
-          <span>{items.length ? '更新失败，暂时显示上次的快报' : '快报加载失败'}</span>
-          <button type="button" className="btn btn-soft h-7 shrink-0 px-2" disabled={query.isFetching} onClick={() => void query.refetch()}>重试</button>
+          <span>{failedSources ? `${failedSources} 个订阅读取失败` : items.length ? '部分内容更新失败' : '快报加载失败'}</span>
+          <button type="button" className="btn btn-soft h-7 shrink-0 px-2" disabled={isFetching} onClick={() => void query.refetch()}>重试</button>
         </div>
       )}
       {items.length > 0 ? (
@@ -113,7 +130,11 @@ function NewsList({ section, openInNewTab }: { section: NewsSection; openInNewTa
             {items.map((item) => <NewsRow key={item.url} item={item} openInNewTab={openInNewTab} />)}
           </ul>
         </div>
-      ) : !query.isError && <p className="px-3 py-6 text-center text-sm text-faint">暂无快报</p>}
+      ) : loading ? (
+        <div className="grid place-items-center px-3 py-6" role="status" aria-label="正在加载快报">
+          <LoaderCircle size={18} className="animate-spin text-faint" />
+        </div>
+      ) : !isError && !failedSources && !missingOrigins?.length && <p className="px-3 py-6 text-center text-sm text-faint">暂无快报</p>}
     </>
   )
 }

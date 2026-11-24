@@ -97,6 +97,25 @@ describe('data requests', () => {
     }
     expect(fetchFeed).toHaveBeenCalledExactlyOnceWith(feedUrl, expect.objectContaining({ credentials: 'omit' }))
   })
+  it('reads OPML sources in batches and keeps successful items when one source fails', async () => {
+    const sources = Array.from({ length: 9 }, (_, index) => ({ url: `https://feeds.example/${index + 1}` }))
+    const fetchFeed = vi.fn(async (url: string) => {
+      if (url.endsWith('/1')) return new Response('', { status: 503 })
+      return new Response(`<rss version="2.0"><channel><title>试验</title><item><title>条目 ${url.at(-1)}</title><link>${url}/story</link></item></channel></rss>`)
+    })
+    vi.stubGlobal('fetch', fetchFeed)
+    const { cookie } = await login()
+    await rpc({ cookie }, 'updateSettings', { ...DEFAULT_SETTINGS, newsSections: [{ id: 'opml-1', name: '科技', sources }] })
+    const path = '/api/news-feed?section=opml-1'
+    const get = (offset: number) => send(`${path}&offset=${offset}`, { headers: { cookie } })
+    expect((await get(1)).status).toBe(400)
+    const first = await (await get(0)).json()
+    expect(first.failedSources).toBe(1)
+    expect(first.items.map((item: { title: string }) => item.title)).toEqual(['条目 2', '条目 3', '条目 4', '条目 5', '条目 6', '条目 7', '条目 8'])
+    expect(fetchFeed).toHaveBeenCalledTimes(8)
+    expect(await (await get(8)).json()).toMatchObject({ items: [{ title: '条目 9' }] })
+    expect(fetchFeed).toHaveBeenCalledTimes(9)
+  })
   it('runs the shared data service and reports its validation errors', async () => {
     const { cookie } = await login()
     const added = await rpc({ cookie }, 'addBookmark', 'https://example.com/docs', 0, null, '文档')
