@@ -149,12 +149,12 @@ function NewsList({ section, openInNewTab }: { section: NewsSection; openInNewTa
       ) : null}
       {(isError || failedSources.length > 0) && (
         <div className="border-b border-line text-xs text-muted">
-          <div className="flex items-center justify-between gap-2 px-3 py-2">
+          <div className={`flex items-center justify-between gap-2 px-3 py-2 ${failedSources.length ? 'overflow-hidden [scrollbar-gutter:stable]' : ''}`}>
             <p role="status">{failedSources.length ? `${failedSources.length} 个订阅读取失败` : items.length ? '部分内容更新失败' : '快报加载失败'}</p>
             <button type="button" className="btn btn-soft h-7 shrink-0 px-2" disabled={isFetching} onClick={() => void query.refetch()}>重试</button>
           </div>
           {failedSources.length > 0 && (
-            <ul aria-label="读取失败的订阅源" className="max-h-40 overflow-y-auto overscroll-contain px-3 pb-2">
+            <ul aria-label="读取失败的订阅源" className="max-h-40 overflow-y-auto overscroll-contain px-3 pb-2 [scrollbar-gutter:stable]">
               {failedSources.map((source) => {
                 const address = sourceAddress(source.url)
                 const label = source.name || address
