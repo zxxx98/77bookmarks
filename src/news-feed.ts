@@ -87,17 +87,16 @@ export function readNewsItems(text: string, url: string): NewsItem[] {
 export async function readNewsBatch(sources: NewsSource[], read: (url: string) => Promise<NewsItem[]>, aggregated: boolean): Promise<NewsFeedResult> {
   const results = await Promise.allSettled(sources.map(({ url }) => read(url)))
   const items: NewsItem[] = []
-  let failedSources = 0
+  const failedSources: string[] = []
   for (const [index, result] of results.entries()) {
+    const { url, name } = sources[index]
     if (result.status === 'rejected') {
-      failedSources++
+      failedSources.push(url)
       continue
     }
-    const { name } = sources[index]
     for (const item of result.value) items.push(item.source ? item : { ...item, source: name || new URL(item.url).hostname })
   }
-  if (failedSources && !aggregated) throw new Error('无法读取快报订阅')
-  return { status: 'ok', items: mergeNewsItems(items, aggregated), ...(failedSources ? { failedSources } : {}) }
+  return { status: 'ok', items: mergeNewsItems(items, aggregated), ...(failedSources.length ? { failedSources } : {}) }
 }
 
 export async function fetchNewsFeed(input: string): Promise<NewsItem[]> {

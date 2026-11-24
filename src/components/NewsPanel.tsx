@@ -1,8 +1,10 @@
-import { useInfiniteQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
 import { ArrowUpRight, ChevronDown, LoaderCircle } from 'lucide-react'
 import { useEffect, useId, useMemo, useState } from 'react'
-import { mergeNewsItems, newsOrigins, NEWS_BATCH_SIZE, NEWS_REFRESH_MS, type NewsItem, type NewsSection } from '../../shared/news'
+import { mergeNewsItems, newsOrigins, NEWS_BATCH_SIZE, NEWS_REFRESH_MS, type NewsFeedResult, type NewsItem, type NewsSection, type NewsSource } from '../../shared/news'
+import { api } from '../api'
 import { platform } from '../platform'
+import { useUi } from '../ui'
 
 const VISIBLE_ITEMS = 6
 const timeFormat = new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
@@ -63,13 +65,24 @@ export function NewsPanel({ sections, openInNewTab }: { sections: NewsSection[];
 }
 
 function NewsList({ section, openInNewTab }: { section: NewsSection; openInNewTab: boolean }) {
+  const queryClient = useQueryClient()
+  const { confirm, toast } = useUi()
   const [granting, setGranting] = useState(false)
   const [grantFailed, setGrantFailed] = useState(false)
+  const [removing, setRemoving] = useState(false)
   const originCount = useMemo(() => newsOrigins(section.sources).length, [section.sources])
+  const queryKey = ['news-feed', section.id, section.sources]
   const query = useInfiniteQuery({
-    queryKey: ['news-feed', section.id, section.sources],
+    queryKey,
     initialPageParam: 0,
-    queryFn: ({ pageParam }) => platform.newsFeed(section, pageParam),
+    queryFn: async ({ pageParam }) => {
+      const result = await platform.newsFeed(section, pageParam)
+      if (section.sources.length === 1 && result.failedSources?.length) {
+        const previous = queryClient.getQueryData<InfiniteData<NewsFeedResult>>(queryKey)?.pages[0]
+        if (previous?.items.length) return { ...result, items: previous.items }
+      }
+      return result
+    },
     getNextPageParam: (_last, [first], offset) => {
       if (first.missingOrigins?.length === originCount) return undefined
       const next = offset + NEWS_BATCH_SIZE
@@ -86,7 +99,8 @@ function NewsList({ section, openInNewTab }: { section: NewsSection; openInNewTa
   }, [fetchNextPage, hasNextPage, isFetching, isError])
 
   const missingOrigins = data?.pages[0]?.missingOrigins
-  const failedSources = data?.pages.reduce((total, page) => total + (page.failedSources ?? 0), 0) ?? 0
+  const failedUrls = new Set(data?.pages.flatMap((page) => page.failedSources ?? []))
+  const failedSources = section.sources.filter(({ url }) => failedUrls.has(url))
   const items = useMemo(() => mergeNewsItems(data?.pages.flatMap((page) => page.items) ?? [], section.sources.length > 1), [data, section.sources.length])
 
   async function grantAccess() {
@@ -102,6 +116,27 @@ function NewsList({ section, openInNewTab }: { section: NewsSection; openInNewTa
     }
   }
 
+  async function removeSource(source: NewsSource) {
+    setRemoving(true)
+    try {
+      const label = source.name || sourceAddress(source.url)
+      const approved = await confirm({
+        title: '移除这个订阅源？',
+        message: `将从「${section.name}」移除「${label.slice(0, 80)}${label.length > 80 ? '…' : ''}」。`,
+        confirmText: '移除订阅源',
+        danger: true,
+      })
+      if (!approved) return
+      const settings = await api.removeNewsSource(section.id, source.url)
+      queryClient.setQueryData(['settings'], settings)
+      toast('已移除订阅源')
+    } catch (error) {
+      toast(error instanceof Error ? error.message : '移除订阅源失败，请重试', 'error')
+    } finally {
+      setRemoving(false)
+    }
+  }
+
   const loading = !items.length && !isError && (query.isPending || hasNextPage || isFetching)
   const scrollable = items.length > VISIBLE_ITEMS
   return (
@@ -112,10 +147,37 @@ function NewsList({ section, openInNewTab }: { section: NewsSection; openInNewTa
           <button type="button" className="btn btn-soft h-8" disabled={granting} onClick={() => void grantAccess()}>允许读取订阅</button>
         </div>
       ) : null}
-      {(isError || failedSources > 0) && (
-        <div className="flex items-center justify-between gap-2 px-3 py-2 text-xs text-muted" role="status">
-          <span>{failedSources ? `${failedSources} 个订阅读取失败` : items.length ? '部分内容更新失败' : '快报加载失败'}</span>
-          <button type="button" className="btn btn-soft h-7 shrink-0 px-2" disabled={isFetching} onClick={() => void query.refetch()}>重试</button>
+      {(isError || failedSources.length > 0) && (
+        <div className="border-b border-line text-xs text-muted">
+          <div className="flex items-center justify-between gap-2 px-3 py-2">
+            <p role="status">{failedSources.length ? `${failedSources.length} 个订阅读取失败` : items.length ? '部分内容更新失败' : '快报加载失败'}</p>
+            <button type="button" className="btn btn-soft h-7 shrink-0 px-2" disabled={isFetching} onClick={() => void query.refetch()}>重试</button>
+          </div>
+          {failedSources.length > 0 && (
+            <ul aria-label="读取失败的订阅源" className="max-h-40 overflow-y-auto overscroll-contain px-3 pb-2">
+              {failedSources.map((source) => {
+                const address = sourceAddress(source.url)
+                const label = source.name || address
+                return (
+                  <li key={source.url} className="flex items-center justify-between gap-2 border-t border-line py-1.5" title={address}>
+                    <div className="min-w-0">
+                      <p className="truncate text-fg">{label}</p>
+                      {source.name && <p className="truncate text-faint">{address}</p>}
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-soft h-7 shrink-0 px-2 hover:text-danger"
+                      aria-label={`移除订阅源 ${label}`}
+                      disabled={removing}
+                      onClick={() => void removeSource(source)}
+                    >
+                      移除
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
         </div>
       )}
       {items.length > 0 ? (
@@ -134,9 +196,14 @@ function NewsList({ section, openInNewTab }: { section: NewsSection; openInNewTa
         <div className="grid place-items-center px-3 py-6" role="status" aria-label="正在加载快报">
           <LoaderCircle size={18} className="animate-spin text-faint" />
         </div>
-      ) : !isError && !failedSources && !missingOrigins?.length && <p className="px-3 py-6 text-center text-sm text-faint">暂无快报</p>}
+      ) : !isError && !failedSources.length && !missingOrigins?.length && <p className="px-3 py-6 text-center text-sm text-faint">暂无快报</p>}
     </>
   )
+}
+
+function sourceAddress(url: string): string {
+  const { host, pathname } = new URL(url)
+  return host + (pathname === '/' ? '' : pathname)
 }
 
 function NewsRow({ item, openInNewTab }: { item: NewsItem; openInNewTab: boolean }) {

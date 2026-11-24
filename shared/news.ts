@@ -22,7 +22,7 @@ export interface NewsItem {
 export interface NewsFeedResult {
   status: 'ok'
   items: NewsItem[]
-  failedSources?: number
+  failedSources?: string[]
   missingOrigins?: string[]
 }
 

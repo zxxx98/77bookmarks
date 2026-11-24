@@ -110,7 +110,7 @@ describe('data requests', () => {
     const get = (offset: number) => send(`${path}&offset=${offset}`, { headers: { cookie } })
     expect((await get(1)).status).toBe(400)
     const first = await (await get(0)).json()
-    expect(first.failedSources).toBe(1)
+    expect(first.failedSources).toEqual([sources[0].url])
     expect(first.items.map((item: { title: string }) => item.title)).toEqual(['条目 2', '条目 3', '条目 4', '条目 5', '条目 6', '条目 7', '条目 8'])
     expect(fetchFeed).toHaveBeenCalledTimes(8)
     expect(await (await get(8)).json()).toMatchObject({ items: [{ title: '条目 9' }] })
@@ -183,7 +183,7 @@ describe('the right-click extension', () => {
     expect(added.value.result).toBe('site_created')
     // No page is open to ask for the icon, so the server fetches it by itself
     await vi.waitFor(async () => expect((await rpc({ cookie }, 'icon', added.value.siteId)).value).toBe(ICON))
-    for (const method of ['deleteSite', 'exportBackup', 'importBackup', 'updateSettings', 'usage', 'todos', 'vaultRead', 'vaultWrite']) {
+    for (const method of ['deleteSite', 'exportBackup', 'importBackup', 'updateSettings', 'removeNewsSource', 'usage', 'todos', 'vaultRead', 'vaultWrite']) {
       expect((await rpc(bearer, method, 1)).status).toBe(403)
     }
     expect((await send('/api/token', { method: 'POST', headers: bearer })).status).toBe(403)

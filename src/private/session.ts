@@ -15,7 +15,7 @@ import type { LocalService, ServiceMethod } from '../storage/service'
 const SPACE_FORMAT = '77bookmarks-space'
 const IDLE_MS = 5 * 60 * 1000
 /** Requests that keep going to the ordinary board while a space is open */
-const OUTSIDE = new Set<ServiceMethod>(['settings', 'updateSettings', 'vaultRead', 'vaultWrite'])
+const OUTSIDE = new Set<ServiceMethod>(['settings', 'updateSettings', 'removeNewsSource', 'vaultRead', 'vaultWrite'])
 
 interface Session {
   service: LocalService

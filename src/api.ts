@@ -13,6 +13,7 @@ export const api = {
   usage: () => call('usage'),
   settings: () => call('settings').then(rememberSettings),
   updateSettings: (settings: SystemSettings) => call('updateSettings', settings).then(rememberSettings),
+  removeNewsSource: (sectionId: string, url: string) => call('removeNewsSource', sectionId, url).then(rememberSettings),
   addBookmark: (
     url: string,
     desktopId: number,

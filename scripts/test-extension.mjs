@@ -12,6 +12,10 @@ const titleRequests = []
 const titleResponses = []
 // Deliberately omit CORS headers: the extension worker must use its granted host access.
 const titleServer = createServer((request, response) => {
+  if (request.url === '/failed-news.xml') {
+    response.writeHead(503).end()
+    return
+  }
   if (request.url === '/news.xml') {
     response.setHeader('Content-Type', 'application/rss+xml; charset=utf-8')
     const items = Array.from({ length: 8 }, (_, index) => `<item><title>快报 ${index + 1}</title><link>https://news.example.com/${index + 1}</link></item>`)
@@ -262,10 +266,36 @@ try {
   await expect(todosRegion).toHaveCount(0)
   await page.setViewportSize(options.viewport)
   await expect(newsList.getByRole('listitem')).toHaveCount(8)
-  await rpc(page, 'updateSettings', { ...savedSettings, newsFeedUrl: '' })
+
+  const healthyFeed = { name: '正常订阅', url: `${titleOrigin}/news.xml` }
+  const failedFeed = { name: '故障订阅', url: `${titleOrigin}/failed-news.xml` }
+  await rpc(page, 'updateSettings', {
+    ...savedSettings,
+    newsFeedUrl: '',
+    newsSections: [{ id: 'opml-1', name: '测试分组', sources: [failedFeed, healthyFeed] }],
+  })
+  const failedList = news.getByRole('list', { name: '读取失败的订阅源' })
+  const remove = failedList.getByRole('button', { name: '移除订阅源 故障订阅' })
+  await expect(failedList.getByRole('listitem')).toHaveCount(1)
+  await expect(news.getByRole('link', { name: /快报 1/ })).toBeVisible()
+  await remove.click()
+  const removeDialog = page.getByRole('dialog', { name: '移除这个订阅源？' })
+  await expect(removeDialog).toContainText('故障订阅')
+  await removeDialog.getByRole('button', { name: '取消', exact: true }).click()
+  await expect(removeDialog).toHaveCount(0)
+  expect((await rpc(page, 'settings')).newsSections[0].sources).toEqual([failedFeed, healthyFeed])
+  await remove.click()
+  await removeDialog.getByRole('button', { name: '移除订阅源', exact: true }).click()
+  await expect(failedList).toHaveCount(0)
+  await expect(news.getByRole('link', { name: /快报 1/ })).toBeVisible()
+  expect((await rpc(page, 'settings')).newsSections[0].sources).toEqual([healthyFeed])
+  await rpc(page, 'updateSettings', { ...savedSettings, newsFeedUrl: `${titleOrigin}/failed-news.xml`, newsSections: [] })
+  await failedList.getByRole('button', { name: /移除订阅源 .*failed-news\.xml/ }).click()
+  await removeDialog.getByRole('button', { name: '移除订阅源', exact: true }).click()
   await expect(news).toHaveCount(0)
+  expect((await rpc(page, 'settings')).newsFeedUrl).toBeUndefined()
   await context.setOffline(true)
-  console.log('✓ News under to-dos, six visible rows, internal scrolling, folding and phone layout')
+  console.log('✓ News under to-dos, six visible rows, phone layout, and confirmed removal of failed feeds')
 
   await page.getByRole('button', { name: '更多', exact: true }).click()
   await page.getByRole('button', { name: '系统设置', exact: true }).click()

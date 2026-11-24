@@ -106,6 +106,33 @@ describe('desktops, groups, sorting and cascading deletion', () => {
 })
 
 describe('news feed settings', () => {
+  it('removes just the confirmed source and keeps concurrent changes to other settings', async () => {
+    const failed = { url: 'https://example.com/rss?a=1' }
+    const other = { url: 'https://example.com/rss?a=2' }
+    const newsFeedUrl = 'https://example.com/rss?a=3'
+    const newsSections = [
+      { id: 'opml-1', name: '科技', sources: [failed, other] },
+      { id: 'opml-2', name: '财经', sources: [failed] },
+    ]
+    await service.updateSettings({ ...DEFAULT_SETTINGS, newsFeedUrl, newsSections })
+    const peer = new LocalService(async () => db)
+    await Promise.all([
+      service.removeNewsSource('opml-1', failed.url),
+      peer.updateSettings({ ...DEFAULT_SETTINGS, siteName: '另一个标签页' }),
+    ])
+    expect(await service.settings()).toMatchObject({
+      siteName: '另一个标签页', newsFeedUrl,
+      newsSections: [{ ...newsSections[0], sources: [other] }, newsSections[1]],
+    })
+    await service.removeNewsSource('opml-1', failed.url)
+    await service.removeNewsSource('opml-1', other.url)
+    expect((await service.settings()).newsSections).toEqual([newsSections[1]])
+    await service.removeNewsSource('news', failed.url)
+    expect((await service.settings()).newsFeedUrl).toBe(newsFeedUrl)
+    await service.removeNewsSource('news', newsFeedUrl)
+    expect((await service.settings()).newsFeedUrl).toBeUndefined()
+  })
+
   it('keeps imported groups and a manual feed independently through a full backup', async () => {
     const newsFeedUrl = 'https://example.com/feed'
     const newsSections = [{ id: 'opml-1', name: '科技', sources: [{ name: '示例', url: 'https://tech.example/feed' }] }]

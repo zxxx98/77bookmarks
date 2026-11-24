@@ -208,6 +208,33 @@ export class LocalService {
       return value
     })
   }
+  async removeNewsSource(sectionId: string, url: string): Promise<SystemSettings> {
+    const sourceUrl = parseNewsFeedUrl(url)
+    if (typeof sectionId !== 'string' || !sourceUrl) throw new Error('无效的快报订阅源')
+    return this.write(async (tx) => {
+      const store = tx.objectStore('settings')
+      const previous = await store.get('system')
+      const saved = previous?.value as SystemSettings | undefined
+      const value = { ...DEFAULT_SETTINGS, ...saved, defaultIntranet: saved?.defaultIntranet !== false }
+      // Match the saved URL as well as the section, in case settings changed in another tab.
+      if (sectionId === 'news') {
+        if (value.newsFeedUrl !== sourceUrl) return value
+        delete value.newsFeedUrl
+      } else {
+        const sections = value.newsSections ?? []
+        const section = sections.find(({ id }) => id === sectionId)
+        if (!section?.sources.some((source) => source.url === sourceUrl)) return value
+        const sources = section.sources.filter((source) => source.url !== sourceUrl)
+        const remaining = sources.length
+          ? sections.map((candidate) => candidate.id === sectionId ? { ...candidate, sources } : candidate)
+          : sections.filter((candidate) => candidate.id !== sectionId)
+        if (remaining.length) value.newsSections = remaining
+        else delete value.newsSections
+      }
+      await store.put({ key: 'system', value, updatedAt: Math.max(Date.now(), (previous?.updatedAt ?? 0) + 1) })
+      return value
+    })
+  }
   private async firstGroup(tx: WriteTransaction, desktopId: number) {
     requireRow(await tx.objectStore('desktops').get(desktopId), '桌面')
     const groups = sorted(await tx.objectStore('groups').index('desktopId').getAll(desktopId))
@@ -703,4 +730,4 @@ export class LocalService {
 
 export type ServiceMethod = { [K in keyof LocalService]: LocalService[K] extends (...args: never[]) => unknown ? K : never }[keyof LocalService]
 export const READ_METHODS = new Set<ServiceMethod>(['board', 'search', 'settings', 'todos', 'usage', 'icon', 'exportBackup', 'vaultRead'])
-export const SERVICE_METHODS: ServiceMethod[] = ['board', 'search', 'settings', 'updateSettings', 'createDesktop', 'updateDesktop', 'deleteDesktop', 'createGroup', 'renameGroup', 'pinGroup', 'deleteGroup', 'addBookmark', 'updateSite', 'deleteSite', 'renameLink', 'deleteLink', 'order', 'todos', 'addTodo', 'updateTodo', 'deleteTodo', 'clearDoneTodos', 'orderTodos', 'recordClick', 'usage', 'icon', 'setIcon', 'removeIcon', 'exportBackup', 'importBackup', 'importChrome', 'vaultRead', 'vaultWrite']
+export const SERVICE_METHODS: ServiceMethod[] = ['board', 'search', 'settings', 'updateSettings', 'removeNewsSource', 'createDesktop', 'updateDesktop', 'deleteDesktop', 'createGroup', 'renameGroup', 'pinGroup', 'deleteGroup', 'addBookmark', 'updateSite', 'deleteSite', 'renameLink', 'deleteLink', 'order', 'todos', 'addTodo', 'updateTodo', 'deleteTodo', 'clearDoneTodos', 'orderTodos', 'recordClick', 'usage', 'icon', 'setIcon', 'removeIcon', 'exportBackup', 'importBackup', 'importChrome', 'vaultRead', 'vaultWrite']
