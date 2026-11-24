@@ -14,8 +14,8 @@ interface Props {
 }
 
 export function NewsReader({ item, section, openInNewTab, onClose }: Props) {
-  const start = useRef<HTMLDivElement>(null)
-  useEffect(() => { start.current?.focus({ preventScroll: true }) }, [])
+  const content = useRef<HTMLDivElement>(null)
+  useEffect(() => { content.current?.focus({ preventScroll: true }) }, [])
 
   const query = useQuery({
     queryKey: ['news-article', section.id, item.feedUrl, item.url],
@@ -34,8 +34,8 @@ export function NewsReader({ item, section, openInNewTab, onClose }: Props) {
   const published = item.publishedAt === null ? null : new Date(item.publishedAt)
 
   return createPortal(
-    <Dialog open onClose={onClose} title={item.title} width="max-w-2xl">
-      <div ref={start} tabIndex={-1} className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3 outline-none">
+    <Dialog open onClose={onClose} title={item.title} width="max-w-2xl" panelClassName="flex max-h-[min(76dvh,52rem)] flex-col overflow-hidden">
+      <div className="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
         <div className="flex min-w-0 items-center gap-2 text-xs text-muted">
           <span className="truncate" title={item.source}>{item.source}</span>
           {published && <time dateTime={published.toISOString()} className="shrink-0">{published.toLocaleString('zh-CN')}</time>}
@@ -46,18 +46,20 @@ export function NewsReader({ item, section, openInNewTab, onClose }: Props) {
         </a>
       </div>
 
-      {query.isPending ? (
-        <div className="flex items-center gap-2 py-5 text-sm text-muted" role="status"><LoaderCircle className="animate-spin" size={16} />正在读取快报内容…</div>
-      ) : article ? (
-        article.format === 'html'
-          ? <article className="news-article" dangerouslySetInnerHTML={{ __html: article.body }} />
-          : <article className="news-article whitespace-pre-wrap">{article.body}</article>
-      ) : query.isError ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm text-muted">
-          <p role="status">快报内容读取失败</p>
-          <button type="button" className="btn btn-soft h-8" disabled={query.isFetching} onClick={() => void query.refetch()}>重试</button>
-        </div>
-      ) : <p className="py-4 text-sm text-muted">此条订阅未提供正文或摘要。</p>}
+      <div ref={content} role="region" aria-label="快报内容" tabIndex={0} className="min-h-0 overflow-y-auto overscroll-contain outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50">
+        {query.isPending ? (
+          <div className="flex items-center gap-2 py-5 text-sm text-muted" role="status"><LoaderCircle className="animate-spin" size={16} />正在读取快报内容…</div>
+        ) : article ? (
+          article.format === 'html'
+            ? <article className="news-article" dangerouslySetInnerHTML={{ __html: article.body }} />
+            : <article className="news-article whitespace-pre-wrap">{article.body}</article>
+        ) : query.isError ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm text-muted">
+            <p role="status">快报内容读取失败</p>
+            <button type="button" className="btn btn-soft h-8" disabled={query.isFetching} onClick={() => void query.refetch()}>重试</button>
+          </div>
+        ) : <p className="py-4 text-sm text-muted">此条订阅未提供正文或摘要。</p>}
+      </div>
     </Dialog>,
     document.body,
   )

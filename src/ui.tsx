@@ -325,12 +325,13 @@ interface DialogProps {
   onClose: () => void
   title: string
   width?: string
+  panelClassName?: string
   closeDisabled?: boolean
   sidePanel?: ReactNode
   children: ReactNode
 }
 
-export function Dialog({ open, onClose, title, width = 'max-w-md', closeDisabled, sidePanel, children }: DialogProps) {
+export function Dialog({ open, onClose, title, width = 'max-w-md', panelClassName = '', closeDisabled, sidePanel, children }: DialogProps) {
   const onCloseRef = useRef(onClose)
   onCloseRef.current = onClose
 
@@ -374,13 +375,13 @@ export function Dialog({ open, onClose, title, width = 'max-w-md', closeDisabled
               role="dialog"
               aria-modal="true"
               aria-label={title}
-              className={`popover-panel w-full shrink-0 p-5 ${sidePanel ? `${width} lg:max-w-lg xl:max-w-xl` : width}`}
+              className={`popover-panel w-full shrink-0 p-5 ${sidePanel ? `${width} lg:max-w-lg xl:max-w-xl` : width} ${panelClassName}`}
               initial={{ opacity: 0, scale: 0.95, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.97, y: 6 }}
               transition={{ type: 'spring', stiffness: 420, damping: 32, layout: { duration: 0.18, ease: [0.2, 0.8, 0.2, 1] } }}
             >
-              <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="mb-4 flex shrink-0 items-center justify-between gap-3">
                 <h2 className="min-w-0 font-display text-base font-semibold [overflow-wrap:anywhere]">{title}</h2>
                 <button
                   className={`icon-btn-sm -mr-1 ${closeDisabled ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}

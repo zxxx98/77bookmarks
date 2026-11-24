@@ -18,8 +18,9 @@ const titleServer = createServer((request, response) => {
   }
   if (request.url === '/news.xml') {
     response.setHeader('Content-Type', 'application/rss+xml; charset=utf-8')
+    const paragraphs = Array.from({ length: 40 }, (_, index) => `<p>正文第 ${index + 1} 段</p>`).join('')
     const bodies = [
-      '<description>备用摘要</description><content:encoded><![CDATA[<p><strong>页内完整正文</strong></p><iframe src="https://unexpected.example/embed"></iframe><script>throw new Error("feed script")</script>]]></content:encoded>',
+      `<description>备用摘要</description><content:encoded><![CDATA[<p><strong>页内完整正文</strong></p>${paragraphs}<iframe src="https://unexpected.example/embed"></iframe><script>throw new Error("feed script")</script>]]></content:encoded>`,
       '<description><![CDATA[<p>页内简短摘要</p>]]></description>',
     ]
     const items = Array.from({ length: 8 }, (_, index) => `<item><title>快报 ${index + 1}</title><link>https://news.example.com/${index + 1}</link>${bodies[index] ?? ''}</item>`)
@@ -257,6 +258,13 @@ try {
   const reader = page.getByRole('dialog', { name: '快报 1', exact: true })
   await expect(reader.locator('article strong')).toHaveText('页内完整正文')
   await expect(reader.locator('iframe, script')).toHaveCount(0)
+  const readerContent = reader.getByRole('region', { name: '快报内容' })
+  expect(await reader.evaluate((panel) => panel.offsetHeight <= window.innerHeight * 0.76 + 1)).toBe(true)
+  expect(await readerContent.evaluate((content) => content.scrollHeight > content.clientHeight)).toBe(true)
+  await readerContent.evaluate((content) => { content.scrollTop = content.scrollHeight })
+  await expect(readerContent.getByText('正文第 40 段', { exact: true })).toBeInViewport()
+  await expect(reader.getByRole('button', { name: '关闭', exact: true })).toBeInViewport()
+  await expect(reader.getByRole('link', { name: '打开原文' })).toBeInViewport()
   await expect(reader.getByRole('link', { name: '打开原文' })).toHaveAttribute('href', 'https://news.example.com/1')
   await expect(page).toHaveURL(url)
   await page.keyboard.press('Escape')
