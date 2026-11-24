@@ -1,5 +1,5 @@
 import { parseFeed } from 'feedsmith'
-import { mergeNewsItems, newsSourceKey, NEWS_REFRESH_MS, type NewsFeedResult, type NewsItem, type NewsSource } from '../shared/news'
+import { mergeNewsItems, newsSourceKey, NEWS_REFRESH_MS, type NewsArticle, type NewsFeedResult, type NewsHeadline, type NewsItem, type NewsSource } from '../shared/news'
 import { parseNewsFeedUrl } from '../shared/url'
 
 const TIMEOUT_MS = 8000
@@ -12,6 +12,24 @@ interface FeedEntry {
   source?: string
   date?: string
   base?: string
+  article?: NewsArticle
+}
+
+interface ParsedEntry extends NewsHeadline {
+  article?: NewsArticle
+}
+
+type ReadFeed = (url: string) => Promise<ParsedEntry[]>
+
+function articleContent(kind: NewsArticle['kind'], body?: string, format: NewsArticle['format'] = 'html'): NewsArticle | undefined {
+  const content = body?.trim()
+  if (content) return { kind, format, body: content }
+}
+
+function atomContent(kind: NewsArticle['kind'], content?: { type?: string; value?: string }): NewsArticle | undefined {
+  const type = content?.type?.toLowerCase()
+  if (!type || type === 'text' || type === 'text/plain') return articleContent(kind, content?.value, 'text')
+  if (type === 'html' || type === 'xhtml' || type === 'text/html' || type === 'application/xhtml+xml') return articleContent(kind, content?.value)
 }
 
 function webUrl(value?: string, base?: string): URL | undefined {
@@ -24,7 +42,7 @@ function webUrl(value?: string, base?: string): URL | undefined {
 
 const plainText = (value?: string) => value?.replace(/\s+/g, ' ').trim()
 
-export function readNewsItems(text: string, url: string): NewsItem[] {
+export function readNewsItems(text: string, url: string): ParsedEntry[] {
   const result = parseFeed(text)
   let entries: FeedEntry[]
   let title: string | undefined
@@ -39,6 +57,7 @@ export function readNewsItems(text: string, url: string): NewsItem[] {
         source: item.source?.title ?? item.dc?.sources?.[0],
         date: item.pubDate ?? item.dc?.dates?.[0],
         base: item.xml?.base,
+        article: articleContent('full', item.content?.encoded) ?? articleContent('summary', item.description),
       }))
       break
     case 'atom':
@@ -50,6 +69,7 @@ export function readNewsItems(text: string, url: string): NewsItem[] {
         source: item.source?.title?.value,
         date: item.published ?? item.updated,
         base: item.xml?.base,
+        article: atomContent('full', item.content) ?? atomContent('summary', item.summary),
       }))
       break
     case 'rdf':
@@ -58,6 +78,7 @@ export function readNewsItems(text: string, url: string): NewsItem[] {
       entries = (result.feed.items ?? []).map((item) => ({
         title: item.title ?? item.dc?.titles?.[0], link: item.link, base: item.xml?.base,
         source: item.dc?.sources?.[0], date: item.dc?.dates?.[0],
+        article: articleContent('full', item.content?.encoded) ?? articleContent('summary', item.description),
       }))
       break
     case 'json':
@@ -65,6 +86,7 @@ export function readNewsItems(text: string, url: string): NewsItem[] {
       entries = (result.feed.items ?? []).map((item) => ({
         title: item.title ?? item.summary, link: item.url ?? item.external_url,
         date: item.date_published ?? item.date_modified,
+        article: articleContent('full', item.content_html) ?? articleContent('full', item.content_text, 'text') ?? articleContent('summary', item.summary, 'text'),
       }))
       break
   }
@@ -79,12 +101,13 @@ export function readNewsItems(text: string, url: string): NewsItem[] {
       title: headline.slice(0, 300), url: link.href,
       source: (plainText(entry.source) || feedTitle || '').slice(0, 120),
       publishedAt: Number.isFinite(date) ? date : null,
+      ...(entry.article ? { article: entry.article } : {}),
     }]
   })
   return mergeNewsItems(items, false)
 }
 
-export async function readNewsBatch(sources: NewsSource[], read: (url: string) => Promise<NewsItem[]>, aggregated: boolean): Promise<NewsFeedResult> {
+export async function readNewsBatch(sources: NewsSource[], read: ReadFeed, aggregated: boolean): Promise<NewsFeedResult> {
   const results = await Promise.allSettled(sources.map(({ url }) => read(url)))
   const items: NewsItem[] = []
   const failedSources: string[] = []
@@ -94,12 +117,19 @@ export async function readNewsBatch(sources: NewsSource[], read: (url: string) =
       failedSources.push(url)
       continue
     }
-    for (const item of result.value) items.push(item.source ? item : { ...item, source: name || new URL(item.url).hostname })
+    for (const { article: _article, ...item } of result.value) {
+      items.push({ ...item, feedUrl: url, source: item.source || name || new URL(item.url).hostname })
+    }
   }
   return { status: 'ok', items: mergeNewsItems(items, aggregated), ...(failedSources.length ? { failedSources } : {}) }
 }
 
-export async function fetchNewsFeed(input: string): Promise<NewsItem[]> {
+export async function readNewsArticle(read: ReadFeed, feedUrl: string, articleUrl: string): Promise<NewsArticle | null> {
+  const entries = await read(feedUrl)
+  return entries.find(({ url }) => url === articleUrl)?.article ?? null
+}
+
+async function fetchNewsFeed(input: string): Promise<ParsedEntry[]> {
   const url = parseNewsFeedUrl(input)
   if (!url) throw new Error('快报订阅地址无效')
   const controller = new AbortController()
@@ -133,8 +163,8 @@ export async function fetchNewsFeed(input: string): Promise<NewsItem[]> {
 
 /** Shares each in-flight request and recent result across open pages. */
 export function createNewsFeedReader() {
-  const cache = new Map<string, { items: Promise<NewsItem[]>; expiresAt: number }>()
-  return (url: string): Promise<NewsItem[]> => {
+  const cache = new Map<string, { items: Promise<ParsedEntry[]>; expiresAt: number }>()
+  const read: ReadFeed = (url) => {
     const key = newsSourceKey(url)
     const cached = cache.get(key)
     if (cached && cached.expiresAt > Date.now()) return cached.items
@@ -149,4 +179,5 @@ export function createNewsFeedReader() {
     )
     return record.items
   }
+  return read
 }

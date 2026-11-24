@@ -381,7 +381,7 @@ export function Dialog({ open, onClose, title, width = 'max-w-md', closeDisabled
               transition={{ type: 'spring', stiffness: 420, damping: 32, layout: { duration: 0.18, ease: [0.2, 0.8, 0.2, 1] } }}
             >
               <div className="mb-4 flex items-center justify-between gap-3">
-                <h2 className="font-display text-base font-semibold">{title}</h2>
+                <h2 className="min-w-0 font-display text-base font-semibold [overflow-wrap:anywhere]">{title}</h2>
                 <button
                   className={`icon-btn-sm -mr-1 ${closeDisabled ? 'opacity-40 cursor-not-allowed pointer-events-none' : ''}`}
                   aria-label="关闭"

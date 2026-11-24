@@ -1,6 +1,6 @@
 import { fetchTitleHtml } from '../title-fetch'
-import { DATA_CHANGED, DATA_MESSAGE, NEWS_MESSAGE, SYNC_MESSAGE, TITLE_MESSAGE } from '../storage/messages'
-import { newsSourcesAt, type NewsFeedResult } from '../../shared/news'
+import { DATA_CHANGED, DATA_MESSAGE, NEWS_ARTICLE_MESSAGE, NEWS_MESSAGE, SYNC_MESSAGE, TITLE_MESSAGE } from '../storage/messages'
+import { findNewsSource, newsSourcesAt, type NewsArticle, type NewsFeedResult } from '../../shared/news'
 import type { LocalService } from '../storage/service'
 import type { Platform } from './types'
 
@@ -8,6 +8,7 @@ import type { Platform } from './types'
 export const isExtension = () => typeof chrome !== 'undefined' && !!chrome.runtime?.id
 
 let previewService: Promise<LocalService> | undefined
+let previewReadNewsFeed: ReturnType<typeof import('../news-feed').createNewsFeedReader> | undefined
 let channel: BroadcastChannel | undefined
 function previewChannel() {
   if (typeof BroadcastChannel !== 'undefined') channel ??= new BroadcastChannel(DATA_CHANGED)
@@ -90,11 +91,26 @@ export const extensionPlatform: Platform = {
     if (!isExtension()) {
       const sources = newsSourcesAt(section, offset)
       if (!sources) throw new Error('快报请求无效')
-      const { fetchNewsFeed, readNewsBatch } = await import('../news-feed')
-      return readNewsBatch(sources, fetchNewsFeed, section.sources.length > 1)
+      const { createNewsFeedReader, readNewsBatch } = await import('../news-feed')
+      previewReadNewsFeed ??= createNewsFeedReader()
+      return readNewsBatch(sources, previewReadNewsFeed, section.sources.length > 1)
     }
     const response = await chrome.runtime.sendMessage({ type: NEWS_MESSAGE, sectionId: section.id, offset }) as { value?: NewsFeedResult; error?: string } | undefined
     if (!response?.value) throw new Error(response?.error ?? '无法读取快报订阅')
+    return response.value
+  },
+  async newsArticle(section, item) {
+    if (!isExtension()) {
+      const source = findNewsSource(section, item.feedUrl)
+      if (!source) throw new Error('这个订阅源尚未配置')
+      const { createNewsFeedReader, readNewsArticle } = await import('../news-feed')
+      previewReadNewsFeed ??= createNewsFeedReader()
+      return readNewsArticle(previewReadNewsFeed, source.url, item.url)
+    }
+    const response = await chrome.runtime.sendMessage({
+      type: NEWS_ARTICLE_MESSAGE, sectionId: section.id, feedUrl: item.feedUrl, articleUrl: item.url,
+    }) as { value?: NewsArticle | null; error?: string } | undefined
+    if (response?.value === undefined) throw new Error(response?.error ?? '无法读取快报内容')
     return response.value
   },
   // An extension may open incognito windows without being allowed to run inside them

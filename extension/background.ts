@@ -1,9 +1,9 @@
 import { LocalService, READ_METHODS, SERVICE_METHODS, type ServiceMethod } from '../src/storage/service'
-import { DATA_CHANGED, DATA_MESSAGE, NEWS_MESSAGE, SYNC_MESSAGE, TITLE_MESSAGE } from '../src/storage/messages'
+import { DATA_CHANGED, DATA_MESSAGE, NEWS_ARTICLE_MESSAGE, NEWS_MESSAGE, SYNC_MESSAGE, TITLE_MESSAGE } from '../src/storage/messages'
 import { SYNC_METHODS, runSyncMethod } from '../src/sync/control'
 import { fetchTitleHtml } from '../src/title-fetch'
-import { createNewsFeedReader, readNewsBatch } from '../src/news-feed'
-import { newsOrigin, newsOrigins, newsSectionsOf, newsSourcesAt, type NewsFeedResult } from '../shared/news'
+import { createNewsFeedReader, readNewsArticle, readNewsBatch } from '../src/news-feed'
+import { findNewsSource, newsOrigin, newsOrigins, newsSectionsOf, newsSourcesAt, type NewsArticle, type NewsFeedResult } from '../shared/news'
 import { parseBookmarkUrl } from '../shared/url'
 import { attachContextMenuHandler, registerContextMenus, reportAddResult } from './context-menu'
 import { describeResult, isBookmarkable } from './lib'
@@ -24,6 +24,19 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
   void chrome.permissions.contains({ origins: [`${parsed.origin}/*`] }).then(
     (granted) => granted ? fetchTitleHtml(message.url) : null,
   ).then((html) => respond({ html }), () => respond({ html: null }))
+  return true
+})
+
+chrome.runtime.onMessage.addListener((message, sender, respond) => {
+  if (sender.id !== chrome.runtime.id || message?.type !== NEWS_ARTICLE_MESSAGE) return
+  const read = async (): Promise<NewsArticle | null> => {
+    const section = newsSectionsOf(await service.settings()).find(({ id }) => id === message.sectionId)
+    const source = findNewsSource(section, message.feedUrl)
+    if (!source || typeof message.articleUrl !== 'string') throw new Error('快报请求无效')
+    if (!await chrome.permissions.contains({ origins: [newsOrigin(source.url)] })) throw new Error('请先允许读取订阅')
+    return readNewsArticle(readNewsFeed, source.url, message.articleUrl)
+  }
+  void read().then((value) => respond({ value }), (error) => respond({ error: error instanceof Error ? error.message : '无法读取快报内容' }))
   return true
 })
 

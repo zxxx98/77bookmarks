@@ -1,5 +1,5 @@
 import type { AccessTokenStatus, UpdateStatus, UpdateTriggerResult } from '../../shared/types'
-import type { NewsFeedResult, NewsSection } from '../../shared/news'
+import type { NewsArticle, NewsFeedResult, NewsItem, NewsSection } from '../../shared/news'
 import type { LocalService, ServiceMethod } from '../storage/service'
 import type { SyncMethod, SyncResults } from '../sync/control'
 
@@ -31,6 +31,7 @@ export interface Platform {
   /** Downloads the start of a page so its title can be read */
   pageHtml(url: string, origin: string, requestPermission: boolean): Promise<PageHtml>
   newsFeed(section: NewsSection, offset: number): Promise<NewsFeedResult>
+  newsArticle(section: NewsSection, item: NewsItem): Promise<NewsArticle | null>
   /** Per-site access the browser has to grant; absent where requests need no such grant */
   hostAccess?: {
     contains(origin: string): Promise<boolean>
