@@ -73,13 +73,14 @@ function NewsList({ section, openInNewTab }: { section: NewsSection; openInNewTa
   const [removing, setRemoving] = useState(false)
   const [reading, setReading] = useState<NewsItem | null>(null)
   const readerTrigger = useRef<HTMLAnchorElement>(null)
+  const verificationVisits = useRef(new Set<string>())
   const originCount = useMemo(() => newsOrigins(section.sources).length, [section.sources])
   const queryKey = ['news-feed', section.id, section.sources]
   const query = useInfiniteQuery({
     queryKey,
     initialPageParam: 0,
     queryFn: async ({ pageParam }) => {
-      const result = await platform.newsFeed(section, pageParam)
+      const result = await platform.newsFeed(section, pageParam, verificationVisits.current)
       if (section.sources.length === 1 && result.failedSources?.length) {
         const previous = queryClient.getQueryData<InfiniteData<NewsFeedResult>>(queryKey)?.pages[0]
         if (previous?.items.length) return { ...result, items: previous.items }
@@ -103,6 +104,7 @@ function NewsList({ section, openInNewTab }: { section: NewsSection; openInNewTa
 
   const missingOrigins = data?.pages[0]?.missingOrigins
   const failedUrls = new Set(data?.pages.flatMap((page) => page.failedSources ?? []))
+  const challengedUrls = new Set(platform.kind === 'selfhost' ? data?.pages.flatMap((page) => page.challengedSources ?? []) : [])
   const failedSources = section.sources.filter(({ url }) => failedUrls.has(url))
   const items = useMemo(() => mergeNewsItems(data?.pages.flatMap((page) => page.items) ?? [], section.sources.length > 1), [data, section.sources.length])
 
@@ -166,6 +168,14 @@ function NewsList({ section, openInNewTab }: { section: NewsSection; openInNewTa
                     <div className="min-w-0">
                       <p className="truncate text-fg">{label}</p>
                       {source.name && <p className="truncate text-faint">{address}</p>}
+                      {challengedUrls.has(source.url) && (
+                        <p className="mt-1">
+                          服务器遇到 Cloudflare 验证，本机也未能读取。
+                          <a href={source.url} target="_blank" rel="noreferrer" className="text-accent underline"
+                            onClick={() => verificationVisits.current.add(source.url)}>打开原站验证</a>
+                          后，回到这里点「重试」。站点需允许本页跨域读取并使用验证 Cookie。
+                        </p>
+                      )}
                     </div>
                     <button
                       type="button"

@@ -111,17 +111,23 @@ export async function readNewsBatch(sources: NewsSource[], read: ReadFeed, aggre
   const results = await Promise.allSettled(sources.map(({ url }) => read(url)))
   const items: NewsItem[] = []
   const failedSources: string[] = []
+  const challengedSources: string[] = []
   for (const [index, result] of results.entries()) {
     const { url, name } = sources[index]
     if (result.status === 'rejected') {
       failedSources.push(url)
+      if (result.reason instanceof FeedChallengeError) challengedSources.push(url)
       continue
     }
     for (const { article: _article, ...item } of result.value) {
       items.push({ ...item, feedUrl: url, source: item.source || name || new URL(item.url).hostname })
     }
   }
-  return { status: 'ok', items: mergeNewsItems(items, aggregated), ...(failedSources.length ? { failedSources } : {}) }
+  return {
+    status: 'ok', items: mergeNewsItems(items, aggregated),
+    ...(failedSources.length ? { failedSources } : {}),
+    ...(challengedSources.length ? { challengedSources } : {}),
+  }
 }
 
 export async function readNewsArticle(read: ReadFeed, feedUrl: string, articleUrl: string): Promise<NewsArticle | null> {
@@ -129,7 +135,9 @@ export async function readNewsArticle(read: ReadFeed, feedUrl: string, articleUr
   return entries.find(({ url }) => url === articleUrl)?.article ?? null
 }
 
-async function fetchNewsFeed(input: string): Promise<ParsedEntry[]> {
+class FeedChallengeError extends Error {}
+
+async function fetchNewsFeed(input: string, credentials: RequestCredentials): Promise<ParsedEntry[]> {
   const url = parseNewsFeedUrl(input)
   if (!url) throw new Error('快报订阅地址无效')
   const controller = new AbortController()
@@ -137,10 +145,12 @@ async function fetchNewsFeed(input: string): Promise<ParsedEntry[]> {
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
   try {
     const response = await fetch(url, {
-      signal: controller.signal, credentials: 'omit', referrerPolicy: 'no-referrer',
+      signal: controller.signal, credentials, referrerPolicy: 'no-referrer',
       headers: { accept: 'application/rss+xml, application/atom+xml, application/feed+json, application/xml, text/xml, */*;q=0.1' },
     })
-    if (!response.ok || !response.body) throw new Error('无法读取快报订阅')
+    if (response.headers.get('cf-mitigated')?.toLowerCase() === 'challenge') throw new FeedChallengeError()
+    const html = /^text\/html\b/i.test(response.headers.get('content-type') ?? '')
+    if ((!response.ok && !html) || !response.body) throw new Error('无法读取快报订阅')
     reader = response.body.getReader()
     const charset = response.headers.get('content-type')?.match(/charset\s*=\s*["']?([^\s;"']+)/i)?.[1]
     const decoder = new TextDecoder(charset)
@@ -153,7 +163,12 @@ async function fetchNewsFeed(input: string): Promise<ParsedEntry[]> {
       if (size > MAX_FEED_BYTES) throw new Error('快报订阅文件过大')
       chunks.push(decoder.decode(value, { stream: true }))
     }
-    return readNewsItems(chunks.join('') + decoder.decode(), response.url || url)
+    const text = chunks.join('') + decoder.decode()
+    if (html && /^\s*(?:<!doctype html[^>]*>\s*)?<html\b/i.test(text) && /window\._cf_chl_opt\s*=|\/cdn-cgi\/challenge-platform\//i.test(text)) {
+      throw new FeedChallengeError()
+    }
+    if (!response.ok) throw new Error('无法读取快报订阅')
+    return readNewsItems(text, response.url || url)
   } finally {
     clearTimeout(timeout)
     void reader?.cancel().catch(() => undefined)
@@ -162,7 +177,7 @@ async function fetchNewsFeed(input: string): Promise<ParsedEntry[]> {
 }
 
 /** Shares each in-flight request and recent result across open pages. */
-export function createNewsFeedReader() {
+export function createNewsFeedReader(credentials: RequestCredentials = 'omit') {
   const cache = new Map<string, { items: Promise<ParsedEntry[]>; expiresAt: number }>()
   const read: ReadFeed = (url) => {
     const key = newsSourceKey(url)
@@ -170,7 +185,7 @@ export function createNewsFeedReader() {
     if (cached && cached.expiresAt > Date.now()) return cached.items
 
     cache.delete(key)
-    const record = { items: fetchNewsFeed(url), expiresAt: Infinity }
+    const record = { items: fetchNewsFeed(url, credentials), expiresAt: Infinity }
     cache.set(key, record)
     if (cache.size > MAX_CACHED_FEEDS) cache.delete(cache.keys().next().value!)
     void record.items.then(

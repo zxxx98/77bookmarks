@@ -133,6 +133,19 @@ describe('data requests', () => {
     expect(await (await get(8)).json()).toMatchObject({ items: [{ title: '条目 9' }] })
     expect(fetchFeed).toHaveBeenCalledTimes(9)
   })
+  it('distinguishes Cloudflare challenges from ordinary access denials', async () => {
+    const sources = ['challenge', 'legacy', 'denied'].map((name) => ({ url: `https://feeds.example/${name}` }))
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(new Response('', { status: 403, headers: { 'cf-mitigated': 'challenge' } }))
+      .mockResolvedValueOnce(new Response('<html><script>window._cf_chl_opt = {}</script></html>', { headers: { 'content-type': 'text/html' } }))
+      .mockResolvedValueOnce(new Response('<html>Forbidden</html>', { status: 403, headers: { server: 'cloudflare', 'content-type': 'text/html' } })))
+    const { cookie } = await login()
+    await rpc({ cookie }, 'updateSettings', { ...DEFAULT_SETTINGS, newsSections: [{ id: 'mixed', name: '混合', sources }] })
+    const response = await send('/api/news-feed?section=mixed', { headers: { cookie } })
+    expect(await response.json()).toEqual({
+      status: 'ok', items: [], failedSources: sources.map(({ url }) => url), challengedSources: [sources[0].url, sources[1].url],
+    })
+  })
   it('runs the shared data service and reports its validation errors', async () => {
     const { cookie } = await login()
     const added = await rpc({ cookie }, 'addBookmark', 'https://example.com/docs', 0, null, '文档')

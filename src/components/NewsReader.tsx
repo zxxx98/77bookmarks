@@ -18,7 +18,7 @@ export function NewsReader({ item, section, openInNewTab, onClose }: Props) {
   useEffect(() => { content.current?.focus({ preventScroll: true }) }, [])
 
   const query = useQuery({
-    queryKey: ['news-article', section.id, item.feedUrl, item.url],
+    queryKey: ['news-article', section.id, item.feedUrl, item.url, item.localCredentials],
     queryFn: async () => {
       const article = await platform.newsArticle(section, item)
       if (article?.format !== 'html') return article

@@ -21,6 +21,7 @@ export interface NewsHeadline {
 
 export interface NewsItem extends NewsHeadline {
   feedUrl: string
+  localCredentials?: 'omit' | 'include'
 }
 
 export interface NewsArticle {
@@ -33,6 +34,7 @@ export interface NewsFeedResult {
   status: 'ok'
   items: NewsItem[]
   failedSources?: string[]
+  challengedSources?: string[]
   missingOrigins?: string[]
 }
 

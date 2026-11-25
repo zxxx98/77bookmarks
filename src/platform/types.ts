@@ -30,7 +30,7 @@ export interface Platform {
   }
   /** Downloads the start of a page so its title can be read */
   pageHtml(url: string, origin: string, requestPermission: boolean): Promise<PageHtml>
-  newsFeed(section: NewsSection, offset: number): Promise<NewsFeedResult>
+  newsFeed(section: NewsSection, offset: number, verificationVisits?: ReadonlySet<string>): Promise<NewsFeedResult>
   newsArticle(section: NewsSection, item: NewsItem): Promise<NewsArticle | null>
   /** Per-site access the browser has to grant; absent where requests need no such grant */
   hostAccess?: {

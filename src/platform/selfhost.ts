@@ -76,8 +76,17 @@ export const selfhostPlatform: Platform = {
     // The server reads the page: no browser permission is involved and no CORS applies
     return { status: 'ok', html: (await request<{ html: string | null }>('/page-title', 'POST', { url })).html }
   },
-  newsFeed: (section, offset) => request<NewsFeedResult>(`/news-feed?section=${encodeURIComponent(section.id)}&offset=${offset}`),
+  async newsFeed(section, offset, verificationVisits) {
+    const result = await request<NewsFeedResult>(`/news-feed?section=${encodeURIComponent(section.id)}&offset=${offset}`)
+    if (!result.challengedSources?.length) return result
+    const { retryChallengedFeeds } = await import('./local-news')
+    return retryChallengedFeeds(section, offset, result, verificationVisits)
+  },
   async newsArticle(section, item) {
+    if (item.localCredentials) {
+      const { localNewsArticle } = await import('./local-news')
+      return localNewsArticle(item)
+    }
     const { article } = await request<{ article: NewsArticle | null }>('/news-article', 'POST', {
       sectionId: section.id, feedUrl: item.feedUrl, articleUrl: item.url,
     })
