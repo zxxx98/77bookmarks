@@ -1,10 +1,11 @@
 import { useInfiniteQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query'
-import { ArrowUpRight, ChevronDown, LoaderCircle } from 'lucide-react'
-import { useEffect, useId, useMemo, useState } from 'react'
+import { BookOpen, ChevronDown, LoaderCircle } from 'lucide-react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { mergeNewsItems, newsOrigins, NEWS_BATCH_SIZE, NEWS_REFRESH_MS, type NewsFeedResult, type NewsItem, type NewsSection, type NewsSource } from '../../shared/news'
 import { api } from '../api'
 import { platform } from '../platform'
 import { useUi } from '../ui'
+import { NewsReader } from './NewsReader'
 
 const VISIBLE_ITEMS = 6
 const timeFormat = new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
@@ -70,6 +71,8 @@ function NewsList({ section, openInNewTab }: { section: NewsSection; openInNewTa
   const [granting, setGranting] = useState(false)
   const [grantFailed, setGrantFailed] = useState(false)
   const [removing, setRemoving] = useState(false)
+  const [reading, setReading] = useState<NewsItem | null>(null)
+  const readerTrigger = useRef<HTMLAnchorElement>(null)
   const originCount = useMemo(() => newsOrigins(section.sources).length, [section.sources])
   const queryKey = ['news-feed', section.id, section.sources]
   const query = useInfiniteQuery({
@@ -189,7 +192,12 @@ function NewsList({ section, openInNewTab }: { section: NewsSection; openInNewTa
           tabIndex={scrollable ? 0 : undefined}
         >
           <ul>
-            {items.map((item) => <NewsRow key={item.url} item={item} openInNewTab={openInNewTab} />)}
+            {items.map((item) => (
+              <NewsRow key={item.url} item={item} openInNewTab={openInNewTab} onRead={(link) => {
+                readerTrigger.current = link
+                setReading(item)
+              }} />
+            ))}
           </ul>
         </div>
       ) : loading ? (
@@ -197,6 +205,10 @@ function NewsList({ section, openInNewTab }: { section: NewsSection; openInNewTa
           <LoaderCircle size={18} className="animate-spin text-faint" />
         </div>
       ) : !isError && !failedSources.length && !missingOrigins?.length && <p className="px-3 py-6 text-center text-sm text-faint">暂无快报</p>}
+      {reading && <NewsReader item={reading} section={section} openInNewTab={openInNewTab} onClose={() => {
+        setReading(null)
+        readerTrigger.current?.focus({ preventScroll: true })
+      }} />}
     </>
   )
 }
@@ -206,7 +218,7 @@ function sourceAddress(url: string): string {
   return host + (pathname === '/' ? '' : pathname)
 }
 
-function NewsRow({ item, openInNewTab }: { item: NewsItem; openInNewTab: boolean }) {
+function NewsRow({ item, openInNewTab, onRead }: { item: NewsItem; openInNewTab: boolean; onRead: (link: HTMLAnchorElement) => void }) {
   const published = item.publishedAt === null ? null : new Date(item.publishedAt)
   const today = published?.toDateString() === new Date().toDateString()
   return (
@@ -216,6 +228,12 @@ function NewsRow({ item, openInNewTab }: { item: NewsItem; openInNewTab: boolean
         title={item.title}
         target={openInNewTab ? '_blank' : undefined}
         rel="noreferrer"
+        aria-haspopup="dialog"
+        onClick={(event) => {
+          if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+          event.preventDefault()
+          onRead(event.currentTarget)
+        }}
         className="flex h-full items-center gap-2 px-3 text-sm outline-none hover:bg-accent-soft hover:text-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50"
       >
         <div className="min-w-0 flex-1">
@@ -228,7 +246,7 @@ function NewsRow({ item, openInNewTab }: { item: NewsItem; openInNewTab: boolean
             <span className="truncate">{item.source}</span>
           </span>
         </div>
-        <ArrowUpRight aria-hidden="true" size={14} className="shrink-0 text-faint" />
+        <BookOpen aria-hidden="true" size={14} className="shrink-0 text-faint" />
       </a>
     </li>
   )

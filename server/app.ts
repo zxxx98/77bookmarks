@@ -1,6 +1,6 @@
 import { DEFAULT_SETTINGS } from '../shared/settings'
-import { newsSectionsOf, newsSourcesAt } from '../shared/news'
-import { createNewsFeedReader, readNewsBatch } from '../src/news-feed'
+import { findNewsSource, newsSectionsOf, newsSourcesAt } from '../shared/news'
+import { createNewsFeedReader, readNewsArticle, readNewsBatch } from '../src/news-feed'
 import { LocalService, READ_METHODS, SERVICE_METHODS, type ServiceMethod } from '../src/storage/service'
 import { SYNC_METHODS, runSyncMethod } from '../src/sync/control'
 import { fetchTitleHtml } from '../src/title-fetch'
@@ -213,6 +213,18 @@ export async function createApp({ store, password, fetchIcon = fetchSiteIcon, up
           return json(await readNewsBatch(sources, readNewsFeed, section.sources.length > 1))
         } catch {
           return fail(502, '无法读取快报订阅')
+        }
+      }
+      case 'POST /api/news-article': {
+        const input = await body(request)
+        if (typeof input?.articleUrl !== 'string') return fail(400, '快报请求无效')
+        const section = newsSectionsOf(await service.settings()).find(({ id }) => id === input.sectionId)
+        const source = findNewsSource(section, input.feedUrl)
+        if (!source) return fail(404, '这个订阅源尚未配置')
+        try {
+          return json({ article: await readNewsArticle(readNewsFeed, source.url, input.articleUrl) })
+        } catch {
+          return fail(502, '无法读取快报内容')
         }
       }
       case 'POST /api/page-title': {

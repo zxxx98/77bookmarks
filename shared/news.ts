@@ -12,11 +12,21 @@ export interface NewsSection {
   sources: NewsSource[]
 }
 
-export interface NewsItem {
+export interface NewsHeadline {
   title: string
   url: string
   source: string
   publishedAt: number | null
+}
+
+export interface NewsItem extends NewsHeadline {
+  feedUrl: string
+}
+
+export interface NewsArticle {
+  kind: 'full' | 'summary'
+  format: 'html' | 'text'
+  body: string
 }
 
 export interface NewsFeedResult {
@@ -83,15 +93,19 @@ export function newsSourcesAt(section: NewsSection, offset: unknown): NewsSource
   return section.sources.slice(offset, offset + NEWS_BATCH_SIZE)
 }
 
+export function findNewsSource(section: NewsSection | undefined, url: unknown): NewsSource | undefined {
+  return section?.sources.find((source) => source.url === url)
+}
+
 export function newsOrigins(sources: NewsSource[]): string[] {
   return [...new Set(sources.map(({ url }) => newsOrigin(url)))]
 }
 
 export const newsOrigin = (url: string): string => `${new URL(url).origin}/*`
 
-export function mergeNewsItems(items: NewsItem[], aggregated = true): NewsItem[] {
+export function mergeNewsItems<T extends NewsHeadline>(items: T[], aggregated = true): T[] {
   const sorted = [...items].sort((a, b) => (b.publishedAt ?? Number.MIN_SAFE_INTEGER) - (a.publishedAt ?? Number.MIN_SAFE_INTEGER))
-  const result: NewsItem[] = []
+  const result: T[] = []
   const seen = new Set<string>()
   for (const item of sorted) {
     if (seen.has(item.url)) continue

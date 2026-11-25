@@ -97,6 +97,23 @@ describe('data requests', () => {
     }
     expect(fetchFeed).toHaveBeenCalledExactlyOnceWith(feedUrl, expect.objectContaining({ credentials: 'omit' }))
   })
+  it('returns the article from the configured source without requesting the original site', async () => {
+    const feedUrl = 'https://feeds.example/rss'
+    const articleUrl = 'https://paper.example/story'
+    const fetchFeed = vi.fn(async () => new Response(`<rss version="2.0"><channel><title>示例报</title><item><title>快报</title><link>${articleUrl}</link><description><![CDATA[<p>摘要</p>]]></description></item></channel></rss>`))
+    vi.stubGlobal('fetch', fetchFeed)
+    const { cookie } = await login()
+    await rpc({ cookie }, 'updateSettings', { ...DEFAULT_SETTINGS, newsFeedUrl: feedUrl })
+    const path = '/api/news-article'
+    const body = { sectionId: 'news', feedUrl, articleUrl }
+    expect((await send(path, { body })).status).toBe(401)
+    expect((await send(path, { headers: { cookie }, body: { ...body, feedUrl: 'https://invalid.example/rss' } })).status).toBe(404)
+    expect(fetchFeed).not.toHaveBeenCalled()
+    await send('/api/news-feed?section=news', { headers: { cookie } })
+    expect(await (await send(path, { headers: { cookie }, body })).json()).toEqual({ article: { kind: 'summary', format: 'html', body: '<p>摘要</p>' } })
+    expect(await (await send(path, { headers: { cookie }, body: { ...body, articleUrl: 'https://other.example/story' } })).json()).toEqual({ article: null })
+    expect(fetchFeed).toHaveBeenCalledExactlyOnceWith(feedUrl, expect.anything())
+  })
   it('reads OPML sources in batches and keeps successful items when one source fails', async () => {
     const sources = Array.from({ length: 9 }, (_, index) => ({ url: `https://feeds.example/${index + 1}` }))
     const fetchFeed = vi.fn(async (url: string) => {

@@ -18,8 +18,13 @@ const titleServer = createServer((request, response) => {
   }
   if (request.url === '/news.xml') {
     response.setHeader('Content-Type', 'application/rss+xml; charset=utf-8')
-    const items = Array.from({ length: 8 }, (_, index) => `<item><title>快报 ${index + 1}</title><link>https://news.example.com/${index + 1}</link></item>`)
-    response.end(`<rss version="2.0"><channel><title>测试订阅</title>${items.join('')}</channel></rss>`)
+    const paragraphs = Array.from({ length: 40 }, (_, index) => `<p>正文第 ${index + 1} 段</p>`).join('')
+    const bodies = [
+      `<description>备用摘要</description><content:encoded><![CDATA[<p><strong>页内完整正文</strong></p>${paragraphs}<iframe src="https://unexpected.example/embed"></iframe><script>throw new Error("feed script")</script>]]></content:encoded>`,
+      '<description><![CDATA[<p>页内简短摘要</p>]]></description>',
+    ]
+    const items = Array.from({ length: 8 }, (_, index) => `<item><title>快报 ${index + 1}</title><link>https://news.example.com/${index + 1}</link>${bodies[index] ?? ''}</item>`)
+    response.end(`<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>测试订阅</title>${items.join('')}</channel></rss>`)
     return
   }
   titleRequests.push(request.url)
@@ -248,6 +253,31 @@ try {
   const todosRegion = page.getByRole('region', { name: '待办', exact: true })
   const newsList = news.getByRole('region', { name: '快报列表', exact: true })
   await expect(newsList.getByRole('listitem')).toHaveCount(8)
+  const firstHeadline = news.getByRole('link', { name: /^快报 1/ })
+  await firstHeadline.click()
+  const reader = page.getByRole('dialog', { name: '快报 1', exact: true })
+  await expect(reader.locator('article strong')).toHaveText('页内完整正文')
+  await expect(reader.locator('iframe, script')).toHaveCount(0)
+  const readerContent = reader.getByRole('region', { name: '快报内容' })
+  expect(await reader.evaluate((panel) => panel.offsetHeight <= window.innerHeight * 0.76 + 1)).toBe(true)
+  expect(await readerContent.evaluate((content) => content.scrollHeight > content.clientHeight)).toBe(true)
+  await readerContent.evaluate((content) => { content.scrollTop = content.scrollHeight })
+  await expect(readerContent.getByText('正文第 40 段', { exact: true })).toBeInViewport()
+  await expect(reader.getByRole('button', { name: '关闭', exact: true })).toBeInViewport()
+  await expect(reader.getByRole('link', { name: '打开原文' })).toBeInViewport()
+  await expect(reader.getByRole('link', { name: '打开原文' })).toHaveAttribute('href', 'https://news.example.com/1')
+  await expect(page).toHaveURL(url)
+  await page.keyboard.press('Escape')
+  await expect(reader).toHaveCount(0)
+  await expect(firstHeadline).toBeFocused()
+  await news.getByRole('link', { name: /^快报 2/ }).click()
+  const excerpt = page.getByRole('dialog', { name: '快报 2', exact: true })
+  await expect(excerpt.locator('article')).toHaveText('页内简短摘要')
+  await excerpt.getByRole('button', { name: '关闭', exact: true }).click()
+  await news.getByRole('link', { name: /^快报 3/ }).click()
+  const emptyReader = page.getByRole('dialog', { name: '快报 3', exact: true })
+  await expect(emptyReader.getByText('此条订阅未提供正文或摘要。')).toBeVisible()
+  await emptyReader.getByRole('button', { name: '关闭', exact: true }).click()
   expect((await news.boundingBox()).y).toBeGreaterThan((await todosRegion.boundingBox()).y)
   expect(await newsList.evaluate((list) => {
     const bottom = list.getBoundingClientRect().bottom
@@ -295,7 +325,7 @@ try {
   await expect(news).toHaveCount(0)
   expect((await rpc(page, 'settings')).newsFeedUrl).toBeUndefined()
   await context.setOffline(true)
-  console.log('✓ News under to-dos, six visible rows, phone layout, and confirmed removal of failed feeds')
+  console.log('✓ News reader, six visible rows, phone layout, and confirmed removal of failed feeds')
 
   await page.getByRole('button', { name: '更多', exact: true }).click()
   await page.getByRole('button', { name: '系统设置', exact: true }).click()
